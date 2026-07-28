@@ -9,6 +9,10 @@ import TasksPage from '@/features/tasks/TasksPage'
 import AnnouncementsPage from '@/features/announcements/AnnouncementsPage'
 import NotificationsPage from '@/features/notifications/NotificationsPage'
 import ProfilePage from '@/features/profile/ProfilePage'
+import AdminDashboard from '@/features/admin/AdminDashboard'
+import AssignmentPage from '@/features/admin/AssignmentPage'
+import AdminSearchPage from '@/features/admin/AdminSearchPage'
+import UserDetailPage from '@/features/admin/UserDetailPage'
 
 export default function AppRoutes() {
   return (
@@ -28,10 +32,14 @@ export default function AppRoutes() {
         </Route>
       </Route>
 
-      {/* Admin-only pages hang off the same guard with allowedRoles */}
+      {/* Admin-only pages */}
       <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
         <Route element={<AppLayout />}>
-          {/* e.g. <Route path="/admin/users" element={<UserManagementPage />} /> */}
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/assignment" element={<AssignmentPage />} />
+          <Route path="/admin/search" element={<AdminSearchPage />} />
+          <Route path="/admin/student/:id" element={<UserDetailPage />} />
+          <Route path="/admin/lecturer/:id" element={<UserDetailPage />} />
         </Route>
       </Route>
 

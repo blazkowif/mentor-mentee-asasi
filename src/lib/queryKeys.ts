@@ -26,7 +26,15 @@ export const queryKeys = {
     group: (groupId: string) => ['chat', 'group', groupId] as const,
     myGroup: (lecturerOrMentorId: string) => ['chat', 'myGroup', lecturerOrMentorId] as const,
   },
-  notifications: {
-    byUser: (userId: string) => ['notifications', userId] as const,
-  },
+notifications: {
+  byUser: (userId: string) => ['notifications', userId] as const,
+},
+admin: {
+  all: ['admin'] as const,
+  students: (programme?: string) => [...['admin', 'students', programme] as const],
+  mentors: () => ['admin', 'mentors'] as const,
+  activity: (userId: string) => ['admin', 'activity', userId] as const,
+  search: (q: string) => ['admin', 'search', q] as const,
+  unassigned: (programme?: string) => ['admin', 'unassigned', programme] as const,
+},
 }

@@ -29,33 +29,33 @@ end $$;
 -- Profiles
 insert into public.users (id, role, matric_number, ic_number, name, programme, mentor_id, email)
 select
-  lecturer.id,
-  'lecturer',
-  'LEC0001',
+lecturer.id,
+'lecturer'::user_role,
+'LEC0001',
   'Test123!',
   'Dr. Nur Amalina',
   null,
-  null,
+  null::uuid,
   'lecturer1@ppst.ums.local'
 from auth.users lecturer
 where lecturer.email = 'lecturer1@ppst.ums.local'
 union all
 select
-  admin_user.id,
-  'admin',
-  'ADM0001',
+admin_user.id,
+'admin'::user_role,
+'ADM0001',
   'Test123!',
   'Admin PPST',
   null,
-  null,
+  null::uuid,
   'admin1@ppst.ums.local'
 from auth.users admin_user
 where admin_user.email = 'admin1@ppst.ums.local'
 union all
 select
-  student.id,
-  'student',
-  'BS2401001',
+student.id,
+'student'::user_role,
+'BS2401001',
   'Test123!',
   'Aiman Hakim',
   'Asasi Sains',
@@ -99,7 +99,7 @@ select
   'Weekly Reflection 01',
   'Write a 1-page reflection about your learning goals this semester.',
   now() + interval '7 days',
-  'medium'
+  'medium'::task_priority
 from public.users u
 where u.email = 'lecturer1@ppst.ums.local'
 on conflict (id) do update
@@ -115,7 +115,7 @@ select
   '44444444-4444-4444-4444-444444444444',
   s.id,
   'task-submissions/student1/reflection01.pdf',
-  'submitted',
+  'submitted'::submission_status,
   null,
   now() - interval '1 day'
 from public.users s
