@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import AppLayout from '@/layouts/AppLayout'
 import LoginPage from '@/features/auth/LoginPage'
+import StaffLoginPage from '@/features/auth/StaffLoginPage'
 import DashboardRouter from '@/features/dashboard/DashboardRouter'
 import ChatPage from '@/features/chat/ChatPage'
 import TasksPage from '@/features/tasks/TasksPage'
@@ -13,6 +14,7 @@ export default function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/staff-login" element={<StaffLoginPage />} />
 
       {/* Any authenticated role */}
       <Route element={<ProtectedRoute />}>

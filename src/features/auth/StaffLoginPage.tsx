@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { loginWithMatric } from '@/services/authService'
+import { loginWithEmail } from '@/services/authService'
 
-export default function LoginPage() {
+export default function StaffLoginPage() {
   const navigate = useNavigate()
-  const [matricNumber, setMatricNumber] = useState('')
-  const [icNumber, setIcNumber] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -14,7 +14,7 @@ export default function LoginPage() {
     setError(null)
     setIsSubmitting(true)
     try {
-      await loginWithMatric(matricNumber, icNumber)
+      await loginWithEmail(email, password)
       navigate('/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed. Please try again.')
@@ -29,23 +29,24 @@ export default function LoginPage() {
         onSubmit={handleSubmit}
         className="w-full max-w-sm rounded-lg bg-white p-8 shadow-md"
       >
-        <h1 className="mb-1 text-xl font-semibold text-ums-blue">Student Sign In</h1>
-        <p className="mb-6 text-sm text-gray-500">Use Matric Number + IC Number</p>
+        <h1 className="mb-1 text-xl font-semibold text-ums-blue">Staff Sign In</h1>
+        <p className="mb-6 text-sm text-gray-500">For Lecturer and Admin accounts</p>
 
-        <label className="mb-1 block text-sm font-medium text-gray-700">Matric Number</label>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
         <input
+          type="email"
           className="mb-4 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-ums-blue focus:outline-none"
-          value={matricNumber}
-          onChange={(e) => setMatricNumber(e.target.value)}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           required
         />
 
-        <label className="mb-1 block text-sm font-medium text-gray-700">IC Number</label>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Password</label>
         <input
           type="password"
           className="mb-4 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-ums-blue focus:outline-none"
-          value={icNumber}
-          onChange={(e) => setIcNumber(e.target.value)}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
           required
         />
 
@@ -60,9 +61,9 @@ export default function LoginPage() {
         </button>
 
         <p className="mt-4 text-center text-sm text-gray-600">
-          Lecturer or admin?{' '}
-          <Link className="font-medium text-ums-blue hover:underline" to="/staff-login">
-            Use staff login
+          Student account?{' '}
+          <Link className="font-medium text-ums-blue hover:underline" to="/login">
+            Use student login
           </Link>
         </p>
       </form>

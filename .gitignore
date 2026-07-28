@@ -25,3 +25,7 @@ npm-debug.log*
 # supabase local
 supabase/.temp
 *.tsbuildinfo
+
+# supabase password and AI
+password.txt
+.agents/skills/
