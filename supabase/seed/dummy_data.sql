@@ -6,17 +6,64 @@
 --   - lecturer1@ppst.ums.local
 --   - admin1@ppst.ums.local
 --
--- Step 2: Replace UUID placeholders below with the real Auth user IDs.
--- Step 3: Run this script in SQL editor.
+-- Step 2: Run this script in SQL editor. It resolves user IDs from auth.users
+-- by email so you do not need manual UUID replacement.
 
 begin;
 
+do $$
+declare
+  lecturer_uuid uuid;
+  admin_uuid uuid;
+  student_uuid uuid;
+begin
+  select id into lecturer_uuid from auth.users where email = 'lecturer1@ppst.ums.local' limit 1;
+  select id into admin_uuid from auth.users where email = 'admin1@ppst.ums.local' limit 1;
+  select id into student_uuid from auth.users where email = 'student1@ppst.ums.local' limit 1;
+
+  if lecturer_uuid is null or admin_uuid is null or student_uuid is null then
+    raise exception 'Missing auth user(s). Create student1/lecturer1/admin1 accounts in Supabase Auth first.';
+  end if;
+end $$;
+
 -- Profiles
 insert into public.users (id, role, matric_number, ic_number, name, programme, mentor_id, email)
-values
-  ('11111111-1111-1111-1111-111111111111', 'lecturer', 'LEC0001', 'Test123!', 'Dr. Nur Amalina', null, null, 'lecturer1@ppst.ums.local'),
-  ('22222222-2222-2222-2222-222222222222', 'admin', 'ADM0001', 'Test123!', 'Admin PPST', null, null, 'admin1@ppst.ums.local'),
-  ('33333333-3333-3333-3333-333333333333', 'student', 'BS2401001', 'Test123!', 'Aiman Hakim', 'Asasi Sains', '11111111-1111-1111-1111-111111111111', 'student1@ppst.ums.local')
+select
+  lecturer.id,
+  'lecturer',
+  'LEC0001',
+  'Test123!',
+  'Dr. Nur Amalina',
+  null,
+  null,
+  'lecturer1@ppst.ums.local'
+from auth.users lecturer
+where lecturer.email = 'lecturer1@ppst.ums.local'
+union all
+select
+  admin_user.id,
+  'admin',
+  'ADM0001',
+  'Test123!',
+  'Admin PPST',
+  null,
+  null,
+  'admin1@ppst.ums.local'
+from auth.users admin_user
+where admin_user.email = 'admin1@ppst.ums.local'
+union all
+select
+  student.id,
+  'student',
+  'BS2401001',
+  'Test123!',
+  'Aiman Hakim',
+  'Asasi Sains',
+  lecturer.id,
+  'student1@ppst.ums.local'
+from auth.users student
+join auth.users lecturer on lecturer.email = 'lecturer1@ppst.ums.local'
+where student.email = 'student1@ppst.ums.local'
 on conflict (id) do update
 set
   role = excluded.role,
@@ -29,28 +76,32 @@ set
 
 -- One mentor group per lecturer
 insert into public.mentor_groups (lecturer_id, group_name)
-values ('11111111-1111-1111-1111-111111111111', 'Asasi Sains Group A')
+select u.id, 'Asasi Sains Group A'
+from public.users u
+where u.email = 'lecturer1@ppst.ums.local'
 on conflict (lecturer_id) do update
 set group_name = excluded.group_name;
 
 -- Announcement
 insert into public.announcements (lecturer_id, title, content)
-values (
-  '11111111-1111-1111-1111-111111111111',
+select
+  u.id,
   'Welcome to Mentoring Week',
   'Please check your first assignment and submit before Friday 5PM.'
-);
+from public.users u
+where u.email = 'lecturer1@ppst.ums.local';
 
 -- Task
 insert into public.tasks (id, lecturer_id, title, description, due_date, priority)
-values (
+select
   '44444444-4444-4444-4444-444444444444',
-  '11111111-1111-1111-1111-111111111111',
+  u.id,
   'Weekly Reflection 01',
   'Write a 1-page reflection about your learning goals this semester.',
   now() + interval '7 days',
   'medium'
-)
+from public.users u
+where u.email = 'lecturer1@ppst.ums.local'
 on conflict (id) do update
 set
   title = excluded.title,
@@ -60,14 +111,15 @@ set
 
 -- Task submission (already submitted)
 insert into public.task_submissions (task_id, student_id, file, status, feedback, submitted_at)
-values (
+select
   '44444444-4444-4444-4444-444444444444',
-  '33333333-3333-3333-3333-333333333333',
-  'task-submissions/33333333-3333-3333-3333-333333333333/reflection01.pdf',
+  s.id,
+  'task-submissions/student1/reflection01.pdf',
   'submitted',
   null,
   now() - interval '1 day'
-)
+from public.users s
+where s.email = 'student1@ppst.ums.local'
 on conflict (task_id, student_id) do update
 set
   file = excluded.file,
@@ -77,36 +129,41 @@ set
 
 -- Personal message
 insert into public.messages (sender_id, receiver_id, message)
-values (
-  '11111111-1111-1111-1111-111111111111',
-  '33333333-3333-3333-3333-333333333333',
+select
+  l.id,
+  s.id,
   'Hi Aiman, let me know if you need help with your reflection.'
-);
+from public.users l
+join public.users s on s.email = 'student1@ppst.ums.local'
+where l.email = 'lecturer1@ppst.ums.local';
 
 -- Group message
 insert into public.messages (sender_id, group_id, message)
 select
-  '11111111-1111-1111-1111-111111111111',
+  u.id,
   mg.id,
   'Group update: next mentoring check-in is Thursday 2PM.'
 from public.mentor_groups mg
-where mg.lecturer_id = '11111111-1111-1111-1111-111111111111'
+join public.users u on u.id = mg.lecturer_id
+where u.email = 'lecturer1@ppst.ums.local'
 limit 1;
 
 -- Notifications
 insert into public.notifications (user_id, title, body, is_read)
-values
-  (
-    '33333333-3333-3333-3333-333333333333',
-    'New Task Assigned',
-    'Weekly Reflection 01 was assigned by your mentor.',
-    false
-  ),
-  (
-    '11111111-1111-1111-1111-111111111111',
-    'Submission Received',
-    'Aiman Hakim submitted Weekly Reflection 01.',
-    false
-  );
+select
+  s.id,
+  'New Task Assigned',
+  'Weekly Reflection 01 was assigned by your mentor.',
+  false
+from public.users s
+where s.email = 'student1@ppst.ums.local'
+union all
+select
+  l.id,
+  'Submission Received',
+  'Aiman Hakim submitted Weekly Reflection 01.',
+  false
+from public.users l
+where l.email = 'lecturer1@ppst.ums.local';
 
 commit;
