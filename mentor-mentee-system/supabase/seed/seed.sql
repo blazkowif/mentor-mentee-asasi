@@ -1,0 +1,14 @@
+-- Sample data for local dev only. Requires matching auth.users rows to exist
+-- first (create them via Supabase Auth admin API / dashboard, then insert
+-- their profile rows here using the same id).
+--
+-- Example shape once you have real auth user ids:
+--
+-- insert into public.users (id, role, matric_number, name, programme, email)
+-- values ('00000000-0000-0000-0000-000000000001', 'lecturer', null, 'Dr. Ahmad', null, 'dr.ahmad@ums.local');
+--
+-- insert into public.mentor_groups (lecturer_id, group_name)
+-- values ('00000000-0000-0000-0000-000000000001', 'Dr. Ahmad — Asasi Sains Group A');
+--
+-- insert into public.users (id, role, matric_number, name, programme, mentor_id, email)
+-- values ('00000000-0000-0000-0000-000000000002', 'student', 'BS2401001', 'Student A', 'Asasi Sains', '00000000-0000-0000-0000-000000000001', 'bs2401001@ums.local');
