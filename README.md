@@ -84,3 +84,9 @@ npm run dev
 - `src/types/database.types.ts` is hand-authored to match the migration.
   Regenerate it from the live schema once the project is linked:
   `npx supabase gen types typescript --project-id <ref> > src/types/database.types.ts`.
+
+
+## For developer testing
+
+- clone the project and type **npm run dev** to view the machine locally. env file will be provided once u contact me.
+
