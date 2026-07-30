@@ -12,19 +12,21 @@ export interface Database {
   public: {
     Tables: {
       users: {
-        Row: {
-          id: string
-          role: UserRole
-          matric_number: string | null
-          ic_number: string | null
-          name: string
-          programme: string | null
-          mentor_id: string | null
-          email: string | null
-          phone: string | null
-          profile_image: string | null
-          created_at: string
-        }
+  Row: {
+    id: string
+    role: UserRole
+    matric_number: string | null
+    ic_number: string | null
+    name: string
+    programme: string | null
+    mentor_id: string | null
+    email: string | null
+    phone: string | null
+    profile_image: string | null
+    address: string | null
+    motto: string | null
+    created_at: string
+  }
         Insert: Partial<Database['public']['Tables']['users']['Row']> & {
           id: string
           role: UserRole

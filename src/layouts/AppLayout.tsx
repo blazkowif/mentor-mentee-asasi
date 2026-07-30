@@ -1,11 +1,7 @@
 import { Outlet } from 'react-router-dom'
 import { useAuthStore } from '@/features/auth/authStore'
+import ProfileSidebar from './ProfileSidebar'
 
-/**
- * Single shared shell for now (topbar + content). Split into
- * StudentLayout / LecturerLayout / AdminLayout once nav items diverge
- * enough to warrant it — the role is already available via useAuthStore.
- */
 export default function AppLayout() {
   const { user, role } = useAuthStore()
 
@@ -17,9 +13,12 @@ export default function AppLayout() {
           {user?.name} · {role}
         </span>
       </header>
-      <main className="p-6">
-        <Outlet />
-      </main>
+      <div className="flex">
+        <ProfileSidebar />
+        <main className="flex-1 p-6">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

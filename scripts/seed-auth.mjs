@@ -1,7 +1,14 @@
+import 'dotenv/config'
 import { createClient } from '@supabase/supabase-js'
 
-const url = 'https://tfucaggnigrgkvyxofea.supabase.co'
-const key = 'sb_publishable_CN2Rev19N3DJ_Pp9UKvxLQ_hi3WzNWj'
+const url = process.env.VITE_SUPABASE_URL
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!url || !key) {
+  console.error('Missing VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env')
+  process.exit(1)
+}
+
 const supabase = createClient(url, key)
 
 async function main() {
@@ -10,7 +17,7 @@ async function main() {
   let fail = 0
 
   for (let i = 1; i <= 2; i++) {
-    const { data, error } = await supabase.auth.admin.createUser({
+    const { error } = await supabase.auth.admin.createUser({
       email: `admin${i}@ppst.ums.local`,
       password: '123',
       email_confirm: true,
@@ -20,7 +27,7 @@ async function main() {
   }
 
   for (let i = 1; i <= 100; i++) {
-    const { data, error } = await supabase.auth.admin.createUser({
+    const { error } = await supabase.auth.admin.createUser({
       email: `lecturer${i}@ppst.ums.local`,
       password: '123',
       email_confirm: true,
@@ -30,7 +37,7 @@ async function main() {
   }
 
   for (let i = 1; i <= 1200; i++) {
-    const { data, error } = await supabase.auth.admin.createUser({
+    const { error } = await supabase.auth.admin.createUser({
       email: `student${i}@ppst.ums.local`,
       password: '123',
       email_confirm: true,

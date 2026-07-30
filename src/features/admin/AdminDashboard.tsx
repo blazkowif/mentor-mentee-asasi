@@ -12,31 +12,6 @@ const PROGRAMMES = [
   'Asasi Sains Sosial',
 ] as const
 
-function ProgrammeChip({ label, count, unassigned }: { label: string; count: number; unassigned: number }) {
-  const chipColour =
-    label === 'Asasi Sains'
-      ? 'bg-blue-50 text-blue-700'
-      : label === 'Asasi Teknologi'
-        ? 'bg-purple-50 text-purple-700'
-        : label === 'Asasi Agrisains'
-          ? 'bg-green-50 text-green-700'
-          : 'bg-amber-50 text-amber-700'
-  return (
-    <div className={`rounded-lg border border-gray-100 p-4 shadow-sm ${chipColour}`}>
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-gray-900">{count}</p>
-      {unassigned > 0 && (
-        <Link
-          to={`/admin/assignment?programme=${encodeURIComponent(label)}`}
-          className="mt-2 inline-block rounded bg-red-50 px-2 py-1 text-xs font-medium text-red-700"
-        >
-          {unassigned} unassigned → assign
-        </Link>
-      )}
-    </div>
-  )
-}
-
 export default function AdminDashboard() {
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
@@ -52,9 +27,10 @@ export default function AdminDashboard() {
   })
 
   const autoAssign = useMutation({
-    mutationFn: async (programme?: string) => adminService.autoAssignMentors({ programme }),
+    mutationFn: async (programme?: string) => adminService.autoAssignMentors(programme ? { programme } : undefined),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.users.all() })
+      qc.invalidateQueries({ queryKey: queryKeys.admin.all })
     },
   })
 
@@ -81,15 +57,28 @@ export default function AdminDashboard() {
       </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {PROGRAMMES.map((p) => {
-          const count = students.filter((s) => s.programme === p).length
-          const missing = students.filter((s) => s.programme === p && !s.mentor_id).length
-          return <ProgrammeChip key={p} label={p} count={count} unassigned={missing} />
-        })}
+        <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+          <p className="text-xs text-gray-500">Total lecturers</p>
+          <p className="mt-1 text-2xl font-semibold text-gray-900">{lecturers.length}</p>
+        </div>
+        <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+          <p className="text-xs text-gray-500">Total students</p>
+          <p className="mt-1 text-2xl font-semibold text-gray-900">{students.length}</p>
+        </div>
+        <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+          <p className="text-xs text-gray-500">Unassigned students</p>
+          <p className="mt-1 text-2xl font-semibold text-red-700">{students.filter((s) => !s.mentor_id).length}</p>
+        </div>
+        <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+          <p className="text-xs text-gray-500">Avg mentees / lecturer</p>
+          <p className="mt-1 text-2xl font-semibold text-gray-900">
+            {lecturers.length ? Math.round(students.filter((s) => s.mentor_id).length / lecturers.length) : 0}
+          </p>
+        </div>
       </div>
 
       <div className="mb-6 rounded-lg bg-white p-4 shadow-sm">
-        <p className="mb-2 text-sm font-semibold text-gray-500">Unassigned students by programme</p>
+        <p className="mb-2 text-sm font-semibold text-gray-500">Mentee assignment</p>
         <div className="flex flex-wrap gap-2">
           {PROGRAMMES.map((p) => {
             const missing = students.filter((s) => s.programme === p && !s.mentor_id).length
@@ -100,7 +89,7 @@ export default function AdminDashboard() {
                 disabled={autoAssign.isPending}
                 className="rounded bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 disabled:opacity-50"
               >
-                {p}: {missing} empty
+                Auto-assign {p} ({missing})
               </button>
             )
           })}
@@ -109,8 +98,14 @@ export default function AdminDashboard() {
             disabled={autoAssign.isPending}
             className="rounded bg-ums-blue px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
           >
-            Auto-assign all
+            Auto-assign all programmes
           </button>
+          <Link
+            to="/admin/assignment"
+            className="rounded bg-white px-3 py-1.5 text-xs font-medium text-ums-blue shadow-sm"
+          >
+            Manual assignment →
+          </Link>
         </div>
       </div>
 

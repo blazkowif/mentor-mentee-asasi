@@ -9,55 +9,35 @@
 begin;
 
 -- ============================================================================
--- Cleanup
+-- Cleanup — wipe everything so re-runs are idempotent
 -- ============================================================================
-delete from public.notifications where user_id in (
-  select id from public.users where email like 'lecturer%@ppst.ums.local'
-     or email like 'student%@ppst.ums.local'
-     or email like 'admin%@ppst.ums.local'
-);
-delete from public.messages where sender_id in (
-  select id from public.users where email like 'lecturer%@ppst.ums.local'
-     or email like 'student%@ppst.ums.local'
-     or email like 'admin%@ppst.ums.local'
-);
-delete from public.task_submissions where student_id in (
-  select id from public.users where email like 'student%@ppst.ums.local'
-);
-delete from public.tasks where lecturer_id in (
-  select id from public.users where email like 'lecturer%@ppst.ums.local'
-);
-delete from public.announcements where lecturer_id in (
-  select id from public.users where email like 'lecturer%@ppst.ums.local'
-);
-delete from public.mentor_groups where lecturer_id in (
-  select id from public.users where email like 'lecturer%@ppst.ums.local'
-);
-delete from public.activity_logs where user_id in (
-  select id from public.users where email like 'lecturer%@ppst.ums.local'
-     or email like 'student%@ppst.ums.local'
-     or email like 'admin%@ppst.ums.local'
-);
-delete from public.users where email like 'lecturer%@ppst.ums.local'
-   or email like 'student%@ppst.ums.local'
-   or email like 'admin%@ppst.ums.local';
+truncate table public.activity_logs cascade;
+truncate table public.notifications cascade;
+truncate table public.messages cascade;
+truncate table public.task_submissions cascade;
+truncate table public.tasks cascade;
+truncate table public.announcements cascade;
+truncate table public.mentor_groups cascade;
+truncate table public.users cascade;
 
 -- ============================================================================
 -- 2 Admins
 -- ============================================================================
 insert into public.users (id, role, matric_number, ic_number, name, programme, mentor_id, email, created_at)
-select id, 'admin'::user_role, 'ADM' || lpad(i::text, 4, '0'), 'IC-ADM-' || lpad(i::text, 4, '0'),
-       'Admin User ' || i, null, null, email, now()
-from auth.users, generate_series(1, 2) i
+select id, 'admin'::user_role, 'ADM' || lpad(row_number() over (order by email)::text, 4, '0'),
+       'IC-ADM-' || lpad(row_number() over (order by email)::text, 4, '0'),
+       'Admin User ' || row_number() over (order by email), null, null, email, now()
+from auth.users
 where email like 'admin%@ppst.ums.local';
 
 -- ============================================================================
 -- 100 Lecturers
 -- ============================================================================
 insert into public.users (id, role, matric_number, ic_number, name, programme, mentor_id, email, created_at)
-select id, 'lecturer'::user_role, 'LEC' || lpad(i::text, 4, '0'), 'IC-LEC-' || lpad(i::text, 4, '0'),
-       'Dr. Lecturer ' || i, null, null, email, now()
-from auth.users, generate_series(1, 100) i
+select id, 'lecturer'::user_role, 'LEC' || lpad(row_number() over (order by email)::text, 4, '0'),
+       'IC-LEC-' || lpad(row_number() over (order by email)::text, 4, '0'),
+       'Dr. Lecturer ' || row_number() over (order by email), null, null, email, now()
+from auth.users
 where email like 'lecturer%@ppst.ums.local';
 
 -- ============================================================================

@@ -1,12 +1,11 @@
 import { useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '@/features/auth/authStore'
 import { useUpdateProfile } from './hooks/useProfile'
 import { uploadFile, getPublicUrl } from '@/services/storageService'
+import * as userService from '@/services/userService'
+import { queryKeys } from '@/lib/queryKeys'
 
-// View/edit profile fields per role (PRD §17).
-// Note: the shared `users` table (PRD §19) only has matric_number/programme —
-// lecturer-specific fields like Staff ID / Faculty from §17 aren't in the
-// schema yet. Add columns + form fields for those if lecturer profiles need them.
 export default function ProfilePage() {
   const user = useAuthStore((s) => s.user)
   const updateProfile = useUpdateProfile(user?.id ?? '')
@@ -16,6 +15,14 @@ export default function ProfilePage() {
   const [name, setName] = useState(user?.name ?? '')
   const [phone, setPhone] = useState(user?.phone ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
+  const [address, setAddress] = useState(user?.address ?? '')
+  const [motto, setMotto] = useState(user?.motto ?? '')
+
+  const { data: mentor } = useQuery({
+    queryKey: queryKeys.users.mentor(user?.id ?? ''),
+    queryFn: () => (user?.mentor_id ? userService.getMentor(user.mentor_id) : Promise.resolve(null)),
+    enabled: !!user?.mentor_id,
+  })
 
   if (!user) return null
 
@@ -36,85 +43,104 @@ export default function ProfilePage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    updateProfile.mutate({ name, phone, email })
+    updateProfile.mutate({ name, phone, email, address, motto })
   }
 
   return (
-    <div className="mx-auto max-w-md">
-      <h1 className="mb-4 text-lg font-semibold text-gray-900">Profile</h1>
+    <div className="mx-auto max-w-3xl">
+      <h1 className="mb-6 text-lg font-semibold text-gray-900">Profile</h1>
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Sidebar */}
+        <div className="lg:col-span-1">
+          <div className="rounded-lg bg-white p-4 shadow-sm">
+            <div className="flex flex-col items-center">
+              <div className="h-24 w-24 overflow-hidden rounded-full bg-ums-gray">
+                {user.profile_image ? (
+                  <img src={user.profile_image} alt={user.name} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center text-2xl font-semibold text-gray-400">
+                    {name.charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <input ref={fileInput} type="file" accept="image/jpeg,image/png" className="hidden" onChange={handleAvatarChosen} />
+              <button
+                onClick={() => fileInput.current?.click()}
+                disabled={isUploading}
+                className="mt-2 text-sm text-ums-blue hover:underline"
+              >
+                {isUploading ? 'Uploading…' : 'Change photo'}
+              </button>
+            </div>
 
-      <div className="mb-6 flex items-center gap-4">
-        <div className="h-16 w-16 overflow-hidden rounded-full bg-ums-gray">
-          {user.profile_image && (
-            <img src={user.profile_image} alt={user.name} className="h-full w-full object-cover" />
-          )}
+            <div className="mt-4 space-y-3">
+              <div>
+                <p className="text-xs font-medium text-gray-400">Name</p>
+                <p className="text-sm text-gray-900">{user.name}</p>
+              </div>
+              {user.matric_number && (
+                <div>
+                  <p className="text-xs font-medium text-gray-400">Matric Number</p>
+                  <p className="text-sm text-gray-900">{user.matric_number}</p>
+                </div>
+              )}
+              {user.programme && (
+                <div>
+                  <p className="text-xs font-medium text-gray-400">Course</p>
+                  <p className="text-sm text-gray-900">{user.programme}</p>
+                </div>
+              )}
+              {user.role === 'student' && mentor && (
+                <div>
+                  <p className="text-xs font-medium text-gray-400">Mentor</p>
+                  <p className="text-sm text-gray-900">{mentor.name}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-xs font-medium text-gray-400">Address</p>
+                <p className="text-sm text-gray-900">{user.address || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-400">Motto</p>
+                <p className="text-sm text-gray-900">{user.motto || '—'}</p>
+              </div>
+            </div>
+          </div>
         </div>
-        <div>
-          <input
-            ref={fileInput}
-            type="file"
-            accept="image/jpeg,image/png"
-            className="hidden"
-            onChange={handleAvatarChosen}
-          />
-          <button
-            onClick={() => fileInput.current?.click()}
-            disabled={isUploading}
-            className="text-sm text-ums-blue hover:underline"
-          >
-            {isUploading ? 'Uploading…' : 'Change photo'}
-          </button>
+
+        {/* Main form */}
+        <div className="lg:col-span-2">
+          <form onSubmit={handleSubmit} className="space-y-4 rounded-lg bg-white p-4 shadow-sm">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Name</label>
+              <input className="w-full rounded border border-gray-300 px-3 py-2 text-sm" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Email</label>
+              <input type="email" className="w-full rounded border border-gray-300 px-3 py-2 text-sm" value={email ?? ''} onChange={(e) => setEmail(e.target.value)} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Phone</label>
+              <input className="w-full rounded border border-gray-300 px-3 py-2 text-sm" value={phone ?? ''} onChange={(e) => setPhone(e.target.value)} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Address</label>
+              <textarea className="w-full rounded border border-gray-300 px-3 py-2 text-sm" value={address ?? ''} onChange={(e) => setAddress(e.target.value)} rows={2} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Motto</label>
+              <textarea className="w-full rounded border border-gray-300 px-3 py-2 text-sm" value={motto ?? ''} onChange={(e) => setMotto(e.target.value)} rows={2} />
+            </div>
+            <button
+              type="submit"
+              disabled={updateProfile.isPending}
+              className="w-full rounded bg-ums-blue py-2 text-sm font-medium text-white hover:bg-ums-blue-light disabled:opacity-60"
+            >
+              {updateProfile.isPending ? 'Saving…' : 'Save changes'}
+            </button>
+          </form>
         </div>
       </div>
-
-      <form onSubmit={handleSubmit} className="space-y-3 rounded-lg bg-white p-4 shadow-sm">
-        {user.matric_number && (
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Matric Number</label>
-            <p className="text-sm text-gray-700">{user.matric_number}</p>
-          </div>
-        )}
-        {user.programme && (
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Programme</label>
-            <p className="text-sm text-gray-700">{user.programme}</p>
-          </div>
-        )}
-
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Name</label>
-          <input
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Email</label>
-          <input
-            type="email"
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            value={email ?? ''}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Phone</label>
-          <input
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            value={phone ?? ''}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={updateProfile.isPending}
-          className="w-full rounded bg-ums-blue py-2 text-sm font-medium text-white hover:bg-ums-blue-light disabled:opacity-60"
-        >
-          {updateProfile.isPending ? 'Saving…' : 'Save changes'}
-        </button>
-      </form>
     </div>
   )
 }
