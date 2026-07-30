@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as adminService from '@/services/adminService'
 import { queryKeys } from '@/lib/queryKeys'
@@ -17,14 +18,24 @@ export default function AssignmentPage() {
   const [programme, setProgramme] = useState<Programme>('all')
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [page, setPage] = useState(1)
+  const pageSize = 50
 
-  const { data: students = [], isLoading: studentsLoading } = useQuery({
+  const {
+    data: students = [],
+    isLoading: studentsLoading,
+  } = useQuery({
     queryKey: queryKeys.admin.students(programme === 'all' ? undefined : programme),
     queryFn: () =>
       adminService.getStudentsByProgramme(programme === 'all' ? undefined : programme),
   })
-  const { data: mentors = [], isLoading: mentorsLoading } =
-    useQuery(adminService.getAvailableMentors())
+  const {
+    data: mentors = [],
+    isLoading: mentorsLoading,
+  } = useQuery({
+    queryKey: queryKeys.admin.mentors(),
+    queryFn: adminService.getAvailableMentors,
+  })
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return students
@@ -35,6 +46,15 @@ export default function AssignmentPage() {
         (s.email ?? '').toLowerCase().includes(q),
     )
   }, [students, search])
+
+  const pageStudents = useMemo(
+    () => filtered.slice((page - 1) * pageSize, page * pageSize),
+    [filtered, page],
+  )
+
+  if (studentsLoading || mentorsLoading) {
+    return <p className="text-sm text-gray-500">Loading…</p>
+  }
 
   const qc = useQueryClient()
   const assign = useMutation({
@@ -77,6 +97,7 @@ export default function AssignmentPage() {
             key={p}
             onClick={() => {
               setProgramme(p)
+              setPage(1)
               setSelectedIds(new Set())
             }}
             className={`rounded-full px-3 py-1.5 text-xs font-medium ${programme === p ? 'bg-ums-blue text-white' : 'bg-white text-gray-700'}`}
@@ -130,7 +151,7 @@ export default function AssignmentPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filtered.map((s) => {
+                {pageStudents.map((s) => {
                   const mentor = mentors.find((m) => m.id === s.mentor_id)
                   return (
                     <tr key={s.id} className="hover:bg-gray-50">
@@ -142,16 +163,11 @@ export default function AssignmentPage() {
                         />
                       </td>
                       <td className="py-2 text-gray-800">{s.name}</td>
-                      <td className="py-2 text-gray-600">
-                        {s.matric_number ?? '—'}
-                      </td>
+                      <td className="py-2 text-gray-600">{s.matric_number ?? '—'}</td>
                       <td className="py-2 text-gray-600">{s.programme}</td>
                       <td className="py-2 text-gray-600">
                         {mentor ? (
-                          <Link
-                            to={`/admin/lecturer/${mentor.id}`}
-                            className="text-ums-blue hover:underline"
-                          >
+                          <Link to={`/admin/lecturer/${mentor.id}`} className="text-ums-blue hover:underline">
                             {mentor.name}
                           </Link>
                         ) : (
@@ -161,7 +177,7 @@ export default function AssignmentPage() {
                     </tr>
                   )
                 })}
-                {filtered.length === 0 && (
+                {pageStudents.length === 0 && (
                   <tr>
                     <td colSpan={5} className="p-3 text-sm text-gray-400">
                       No students match your filters.
@@ -171,12 +187,34 @@ export default function AssignmentPage() {
               </tbody>
             </table>
           </div>
+          {filtered.length > pageSize && (
+            <div className="mt-3 flex items-center justify-between text-sm text-gray-600">
+              <span>
+                {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} of{' '}
+                {filtered.length}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                  className="rounded bg-gray-50 px-2 py-1 disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <button
+                  disabled={page * pageSize >= filtered.length}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="rounded bg-gray-50 px-2 py-1 disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="rounded-lg bg-white p-4 shadow-sm">
-          <h3 className="mb-2 text-sm font-semibold text-gray-500">
-            Assign selected ({selectedIds.size})
-          </h3>
+          <h3 className="mb-2 text-sm font-semibold text-gray-500">Assign selected ({selectedIds.size})</h3>
           <select
             className="mb-2 w-full rounded-md border border-gray-200 p-2 text-sm"
             defaultValue=""

@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/types/database.types'
-import type { UserRole } from '@/types/database.types'
 
 export type UserRow = Database['public']['Tables']['users']['Row']
 export type Programmes = 'Asasi Sains' | 'Asasi Teknologi' | 'Asasi Agrisains' | 'Asasi Sains Sosial'
@@ -83,7 +82,9 @@ export async function autoAssignMentors(options?: { programme?: string }) {
     id: s.id,
     mentor_id: ids[Math.floor(Math.random() * ids.length)],
   }))
-  const { error: upErr } = await supabase.from('users').upsert(updated, { count: 'exact' })
+  const { error: upErr } = await supabase
+    .from('users')
+    .upsert(updated as any[], { count: 'exact' })
   if (upErr) throw upErr
   return { assigned: updated.length }
 }
