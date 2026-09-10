@@ -7,9 +7,11 @@ type Message = Database['public']['Tables']['messages']['Row']
 export default function MessageBubble({
   message,
   isOwn,
+  onDelete,
 }: {
   message: Message
   isOwn: boolean
+  onDelete?: (messageId: string) => void
 }) {
   return (
     <div className={clsx('flex', isOwn ? 'justify-end' : 'justify-start')}>
@@ -29,6 +31,15 @@ export default function MessageBubble({
           >
             Attachment
           </a>
+        )}
+        {onDelete && (
+          <button
+            type="button"
+            onClick={() => onDelete(message.id)}
+            className={clsx('mt-1 block text-[10px] underline', isOwn ? 'text-blue-100' : 'text-gray-500')}
+          >
+            Delete for everyone
+          </button>
         )}
         <span className={clsx('mt-1 block text-[10px]', isOwn ? 'text-blue-100' : 'text-gray-400')}>
           {formatRelative(message.created_at)}

@@ -61,15 +61,24 @@ export default function AdminSearchPage() {
           <h2 className="mb-2 text-sm font-semibold text-gray-500">Lecturers</h2>
           <div className="grid gap-3 lg:grid-cols-2">
             {lecturers.map((l) => (
-              <Link
+              <div
                 key={l.id}
-                to={`/admin/lecturer/${l.id}`}
                 className="block rounded-lg bg-white p-4 shadow-sm hover:bg-gray-50"
               >
                 <p className="font-medium text-gray-900">{l.name}</p>
                 <p className="text-xs text-gray-500">{l.email}</p>
-                <p className="text-xs text-ums-blue">View profile →</p>
-              </Link>
+                <div className="mt-2 flex items-center gap-3 text-xs">
+                  <Link to={`/admin/lecturer/${l.id}`} className="text-ums-blue hover:underline">
+                    View profile →
+                  </Link>
+                  <Link
+                    to={`/chat?user=${encodeURIComponent(l.id)}`}
+                    className="font-medium text-ums-blue hover:underline"
+                  >
+                    Chat
+                  </Link>
+                </div>
+              </div>
             ))}
           </div>
         </div>
