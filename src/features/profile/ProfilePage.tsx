@@ -11,10 +11,12 @@ export default function ProfilePage() {
   const updateProfile = useUpdateProfile(user?.id ?? '')
   const fileInput = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+  const [statusIsError, setStatusIsError] = useState(false)
 
   const [name, setName] = useState(user?.name ?? '')
   const [phone, setPhone] = useState(user?.phone ?? '')
-  const [email, setEmail] = useState(user?.email ?? '')
+  const [email] = useState(user?.email ?? '')
   const [address, setAddress] = useState(user?.address ?? '')
   const [motto, setMotto] = useState(user?.motto ?? '')
 
@@ -30,11 +32,27 @@ export default function ProfilePage() {
     const file = e.target.files?.[0]
     if (!file || !user) return
     setIsUploading(true)
+    setStatus(null)
     try {
-      const path = `${user.id}/${file.name}`
+      const path = `${user.id}/${crypto.randomUUID()}-${file.name}`
       await uploadFile('profile', path, file)
       const url = getPublicUrl('profile', path)
-      updateProfile.mutate({ profile_image: url })
+      updateProfile.mutate(
+        { profile_image: url },
+        {
+          onSuccess: () => {
+            setStatusIsError(false)
+            setStatus('Profile photo updated.')
+          },
+          onError: (error) => {
+            setStatusIsError(true)
+            setStatus(error instanceof Error ? error.message : 'Could not update profile photo.')
+          },
+        },
+      )
+    } catch (error) {
+      setStatusIsError(true)
+      setStatus(error instanceof Error ? error.message : 'Could not upload profile photo.')
     } finally {
       setIsUploading(false)
       if (fileInput.current) fileInput.current.value = ''
@@ -43,7 +61,20 @@ export default function ProfilePage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    updateProfile.mutate({ name, phone, email, address, motto })
+    setStatus(null)
+    updateProfile.mutate(
+      { name, phone, address, motto },
+      {
+        onSuccess: () => {
+          setStatusIsError(false)
+          setStatus('Profile changes saved.')
+        },
+        onError: (error) => {
+          setStatusIsError(true)
+          setStatus(error instanceof Error ? error.message : 'Could not save profile changes.')
+        },
+      },
+    )
   }
 
   return (
@@ -116,8 +147,9 @@ export default function ProfilePage() {
               <input className="w-full rounded border border-gray-300 px-3 py-2 text-sm" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">Email</label>
-              <input type="email" className="w-full rounded border border-gray-300 px-3 py-2 text-sm" value={email ?? ''} onChange={(e) => setEmail(e.target.value)} />
+              <label className="mb-1 block text-xs font-medium text-gray-600">Account email</label>
+              <input type="email" className="w-full rounded border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-500" value={email ?? ''} readOnly />
+              <p className="mt-1 text-xs text-gray-400">Contact an administrator to change your login email.</p>
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-600">Phone</label>
@@ -138,6 +170,11 @@ export default function ProfilePage() {
             >
               {updateProfile.isPending ? 'Saving…' : 'Save changes'}
             </button>
+            {status && (
+              <p className={statusIsError ? 'text-sm text-red-600' : 'text-sm text-green-700'}>
+                {status}
+              </p>
+            )}
           </form>
         </div>
       </div>

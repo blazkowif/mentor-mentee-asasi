@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import { format } from 'date-fns'
-import { supabase } from '@/lib/supabase'
 import * as adminService from '@/services/adminService'
 import { queryKeys } from '@/lib/queryKeys'
 
@@ -15,9 +14,7 @@ export default function UserDetailPage() {
   const { data: users = [], isLoading: usersLoading } = useQuery({
     queryKey: queryKeys.users.all(),
     queryFn: async () => {
-      const { data, error } = await supabase.from('users').select('*').order('role').order('name')
-      if (error) throw error
-      return data ?? []
+      return adminService.listAllUsers()
     },
   })
 

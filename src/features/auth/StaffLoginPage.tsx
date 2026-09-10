@@ -24,7 +24,24 @@ export default function StaffLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ums-gray-light px-4">
+    <div
+      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 px-4 py-10"
+      style={{
+        backgroundImage: "url('/login-background.jpg')",
+        backgroundColor: '#000',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundSize: 'contain',
+      }}
+    >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 opacity-70"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle at 8% 14%, #fff 0 1px, transparent 1.5px), radial-gradient(circle at 18% 78%, #fff 0 1px, transparent 1.5px), radial-gradient(circle at 31% 10%, #fff 0 1px, transparent 1.5px), radial-gradient(circle at 46% 88%, #fff 0 1px, transparent 1.5px), radial-gradient(circle at 68% 12%, #fff 0 1px, transparent 1.5px), radial-gradient(circle at 83% 72%, #fff 0 1px, transparent 1.5px), radial-gradient(circle at 94% 28%, #fff 0 1px, transparent 1.5px)',
+        }}
+      />
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-sm rounded-lg bg-white p-8 shadow-md"

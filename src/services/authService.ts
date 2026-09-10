@@ -60,7 +60,7 @@ export async function getCurrentAppUser() {
 
   const { data, error } = await supabase
     .from('users')
-    .select('*')
+    .select('id, role, matric_number, name, programme, mentor_id, email, phone, profile_image, address, motto, created_at')
     .eq('id', authUser.id)
     .single()
 

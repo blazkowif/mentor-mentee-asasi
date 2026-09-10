@@ -21,14 +21,6 @@ export function useMentor(mentorId: string | null | undefined) {
   })
 }
 
-export function useMyGroup(lecturerOrMentorId: string | null | undefined) {
-  return useQuery({
-    queryKey: queryKeys.chat.myGroup(lecturerOrMentorId ?? ''),
-    queryFn: () => chatService.getMyGroup(lecturerOrMentorId!),
-    enabled: !!lecturerOrMentorId,
-  })
-}
-
 export function usePersonalMessages(userA: string | undefined, userB: string | undefined) {
   const queryClient = useQueryClient()
   const queryKey = queryKeys.chat.personal(userA ?? '', userB ?? '')
@@ -42,33 +34,14 @@ export function usePersonalMessages(userA: string | undefined, userB: string | u
   useEffect(() => {
     if (!userA || !userB) return
     const unsubscribe = chatService.subscribeToMessages({ userA, userB }, (message) => {
-      queryClient.setQueryData(queryKey, (old: typeof query.data) => [...(old ?? []), message])
+      queryClient.setQueryData(queryKey, (old: typeof query.data) => {
+        if (old?.some((item) => item.id === message.id)) return old
+        return [...(old ?? []), message]
+      })
     })
     return unsubscribe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userA, userB])
-
-  return query
-}
-
-export function useGroupMessages(groupId: string | undefined) {
-  const queryClient = useQueryClient()
-  const queryKey = queryKeys.chat.group(groupId ?? '')
-
-  const query = useQuery({
-    queryKey,
-    queryFn: () => chatService.listGroupMessages(groupId!),
-    enabled: !!groupId,
-  })
-
-  useEffect(() => {
-    if (!groupId) return
-    const unsubscribe = chatService.subscribeToMessages({ groupId }, (message) => {
-      queryClient.setQueryData(queryKey, (old: typeof query.data) => [...(old ?? []), message])
-    })
-    return unsubscribe
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupId])
 
   return query
 }

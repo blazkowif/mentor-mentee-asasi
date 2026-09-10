@@ -3,9 +3,7 @@ import { useAuthStore } from '@/features/auth/authStore'
 import {
   useMentees,
   useMentor,
-  useMyGroup,
   usePersonalMessages,
-  useGroupMessages,
   useSendMessage,
 } from './hooks/useChat'
 import ConversationList, { type ChatThread } from './components/ConversationList'
@@ -20,19 +18,17 @@ export default function ChatPage() {
   const isLecturer = role === 'lecturer'
   const { data: mentees } = useMentees(isLecturer ? user?.id : undefined)
   const { data: mentor } = useMentor(!isLecturer ? user?.mentor_id : undefined)
-  const { data: group } = useMyGroup(isLecturer ? user?.id : user?.mentor_id)
   const sendMessage = useSendMessage()
 
   const threads: ChatThread[] = useMemo(() => {
     const list: ChatThread[] = []
-    if (group) list.push({ key: 'group', label: group.group_name, subtitle: 'Group chat' })
     if (isLecturer) {
       mentees?.forEach((m) => list.push({ key: `personal:${m.id}`, label: m.name, subtitle: m.matric_number ?? undefined }))
     } else if (mentor) {
       list.push({ key: `personal:${mentor.id}`, label: mentor.name, subtitle: 'Your mentor' })
     }
     return list
-  }, [group, isLecturer, mentees, mentor])
+  }, [isLecturer, mentees, mentor])
 
   const effectiveActiveKey = activeKey ?? threads[0]?.key ?? null
   const activeThread = threads.find((t) => t.key === effectiveActiveKey)
@@ -40,21 +36,18 @@ export default function ChatPage() {
   const otherUserId =
     effectiveActiveKey?.startsWith('personal:') ? effectiveActiveKey.split(':')[1] : undefined
 
-  const groupMessages = useGroupMessages(effectiveActiveKey === 'group' ? group?.id : undefined)
   const personalMessages = usePersonalMessages(
     effectiveActiveKey?.startsWith('personal:') ? user?.id : undefined,
     otherUserId,
   )
 
-  const messages = effectiveActiveKey === 'group' ? groupMessages.data : personalMessages.data
+  const messages = personalMessages.data
 
   if (!user) return null
 
   function handleSend(text: string) {
     if (!user || !effectiveActiveKey) return
-    if (effectiveActiveKey === 'group' && group) {
-      sendMessage.mutate({ senderId: user.id, groupId: group.id, message: text })
-    } else if (otherUserId) {
+    if (otherUserId) {
       sendMessage.mutate({ senderId: user.id, receiverId: otherUserId, message: text })
     }
   }
@@ -83,7 +76,9 @@ export default function ChatPage() {
           <div className="flex flex-1 items-center justify-center text-sm text-gray-400">
             {isLecturer
               ? 'Select a mentee to start chatting.'
-              : 'Your mentor / group chat will appear here once assigned.'}
+              : role === 'student'
+              ? 'Your mentor chat will appear here once assigned.'
+              : 'Chat is available only for mentor-mentee conversations.'}
           </div>
         )}
       </div>

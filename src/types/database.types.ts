@@ -16,7 +16,7 @@ export interface Database {
     id: string
     role: UserRole
     matric_number: string | null
-    ic_number: string | null
+    ic_number?: string | null
     name: string
     programme: string | null
     mentor_id: string | null

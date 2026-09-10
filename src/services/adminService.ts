@@ -3,13 +3,26 @@ import type { Database } from '@/types/database.types'
 
 export type UserRow = Database['public']['Tables']['users']['Row']
 export type Programmes = 'Asasi Sains' | 'Asasi Teknologi' | 'Asasi Agrisains' | 'Asasi Sains Sosial'
+const SAFE_USER_FIELDS = 'id, role, matric_number, name, programme, mentor_id, email, phone, profile_image, address, motto, created_at'
+
+export async function listAllUsers(): Promise<UserRow[]> {
+  const { data, error } = await supabase
+    .from('users')
+    .select(SAFE_USER_FIELDS)
+      .order('role')
+      .order('name')
+      .limit(2000)
+  if (error) throw error
+  return data ?? []
+}
 
 export async function getStudentsByProgramme(programme?: string): Promise<UserRow[]> {
   let q = supabase
     .from('users')
-    .select('*')
+    .select(SAFE_USER_FIELDS)
     .eq('role', 'student')
     .order('name')
+      .limit(2000)
   if (programme) q = q.eq('programme', programme)
   const { data, error } = await q
   if (error) throw error
@@ -19,20 +32,24 @@ export async function getStudentsByProgramme(programme?: string): Promise<UserRo
 export async function getAvailableMentors(): Promise<UserRow[]> {
   const { data, error } = await supabase
     .from('users')
-    .select('*')
+    .select(SAFE_USER_FIELDS)
     .eq('role', 'lecturer')
     .order('name')
+      .limit(2000)
   if (error) throw error
   return data ?? []
 }
 
 export async function searchUsers(query: string): Promise<UserRow[]> {
+  const safeQuery = query.trim().replace(/[%,.()_]/g, '')
+  if (!safeQuery) return []
   const { data, error } = await supabase
     .from('users')
-    .select('*')
-    .or(`name.ilike.%${query}%,email.ilike.%${query}%,matric_number.ilike.%${query}%`)
+    .select('id, role, matric_number, name, programme, mentor_id, email, phone, profile_image, address, motto, created_at')
+    .or(`name.ilike.%${safeQuery}%,email.ilike.%${safeQuery}%,matric_number.ilike.%${safeQuery}%`)
     .order('role')
     .order('name')
+    .limit(50)
   if (error) throw error
   return data ?? []
 }
