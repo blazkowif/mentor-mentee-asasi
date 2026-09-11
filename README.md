@@ -10,28 +10,49 @@ React + Vite + TypeScript + Tailwind CSS + React Router + TanStack Query +
 Zustand, on Supabase (Postgres, Auth, Realtime, Storage, RLS). No separate
 backend server.
 
-## Getting started
+## Getting started for developers
 
 ```bash
 npm install
-cp .env.example .env      # fill in your Supabase project URL + anon key
+copy .env.example .env    # Windows
+# cp .env.example .env    # macOS/Linux
 npm run dev
 ```
 
-## Setting up Supabase
+The repository already contains the shared development Supabase URL and public
+frontend key in `.env.example`. Copy the file as shown; do not edit the values.
+Ask the project owner for an existing test account to log in.
 
-1. Create a project at supabase.com.
-2. Push the schema:
-   ```bash
-   supabase link --project-ref <your-project-ref>
-   supabase db push
-   ```
-   (or paste `supabase/migrations/0001_init.sql` then `0002_storage.sql`
-   into the SQL editor, in that order).
-3. Create at least one lecturer + one student `auth.users` row (see the
-   login design note below), then insert matching `public.users` rows per
-   `supabase/seed/seed.sql`, and a `mentor_groups` row for the lecturer, so
-   there's something to see in the dashboards/chat/tasks.
+The app connects directly to the already-configured Supabase project. The
+database, authentication accounts, storage, and seed data are already set up.
+Developers do not need the Supabase CLI, a local database, or any seed scripts
+for normal frontend work. They should use the supplied test credentials and
+avoid changing or deleting shared data.
+
+Before opening a pull request, create a branch and run:
+
+```bash
+git checkout -b feature/short-description
+npm run typecheck
+npm run lint
+npm run build
+npm run dev
+```
+
+Push the branch and open a pull request into `main`. `.env` is ignored by Git
+and must never be committed.
+
+The frontend only uses the two `VITE_` variables. Never add a
+`SUPABASE_SERVICE_ROLE_KEY` to this file or the frontend; it is privileged and
+bypasses RLS. If a secret is ever committed or shared, rotate it in Supabase
+immediately.
+
+## Supabase maintenance
+
+The shared Supabase project is maintained by the project owner. Developers
+working on the frontend should not run migrations, seed scripts, or change the
+shared database. The files in `supabase/migrations/` and `supabase/seed/` are
+for database maintainers and isolated development projects only.
 
 ## What's working
 
@@ -86,7 +107,10 @@ npm run dev
   `npx supabase gen types typescript --project-id <ref> > src/types/database.types.ts`.
 
 
-## For developer testing
 
-- clone the project and type **npm run dev** to view the machine locally. env file will be provided once u contact me.
+
+
+
+
+
 
