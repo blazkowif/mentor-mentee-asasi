@@ -40,6 +40,22 @@ export function useMyGroup(lecturerOrMentorId: string | null | undefined) {
   })
 }
 
+export function useMyGroups(userId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.chat.groups(userId ?? ''),
+    queryFn: chatService.listMyGroups,
+    enabled: !!userId,
+  })
+}
+
+export function useStudentSearch(query: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.chat.studentSearch(query),
+    queryFn: () => userService.searchChatUsers(query),
+    enabled: enabled && query.trim().length >= 2,
+  })
+}
+
 export function usePersonalMessages(userA: string | undefined, userB: string | undefined) {
   const queryClient = useQueryClient()
   const queryKey = queryKeys.chat.personal(userA ?? '', userB ?? '')

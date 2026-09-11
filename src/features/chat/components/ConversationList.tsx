@@ -16,21 +16,28 @@ export default function ConversationList({
   onSelect: (key: string) => void
 }) {
   return (
-    <div className="w-56 shrink-0 border-r border-gray-200 bg-white">
-      {threads.map((t) => (
+    <div className="flex-1 overflow-y-auto bg-[#191b2b]">
+      {threads.map((thread) => (
         <button
-          key={t.key}
-          onClick={() => onSelect(t.key)}
+          key={thread.key}
+          type="button"
+          onClick={() => onSelect(thread.key)}
           className={clsx(
-            'block w-full border-b border-gray-100 px-3 py-2.5 text-left text-sm',
-            activeKey === t.key ? 'bg-ums-blue/5 font-medium text-ums-blue' : 'text-gray-700 hover:bg-gray-50',
+            'block w-full border-b border-[#252840] px-4 py-3 text-left text-sm transition',
+            activeKey === thread.key
+              ? 'bg-[#7885e8]/25 font-medium text-white'
+              : 'text-[#d7dbeb] hover:bg-[#303650]',
           )}
         >
-          {t.label}
-          {t.subtitle && <span className="block text-xs text-gray-400">{t.subtitle}</span>}
+          {thread.label}
+          {thread.subtitle && (
+            <span className="block text-xs text-[#aeb6d2]">{thread.subtitle}</span>
+          )}
         </button>
       ))}
-      {threads.length === 0 && <p className="p-3 text-xs text-gray-400">No conversations yet.</p>}
+      {threads.length === 0 && (
+        <p className="p-4 text-xs text-[#aeb6d2]">No conversations yet.</p>
+      )}
     </div>
   )
 }

@@ -25,6 +25,8 @@ export const queryKeys = {
       ['chat', 'personal', [userA, userB].sort().join(':')] as const,
     group: (groupId: string) => ['chat', 'group', groupId] as const,
     myGroup: (lecturerOrMentorId: string) => ['chat', 'myGroup', lecturerOrMentorId] as const,
+    groups: (userId: string) => ['chat', 'groups', userId] as const,
+    studentSearch: (query: string) => ['chat', 'studentSearch', query] as const,
   },
 notifications: {
   byUser: (userId: string) => ['notifications', userId] as const,

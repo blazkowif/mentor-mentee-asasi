@@ -239,6 +239,27 @@ export interface Database {
         Args: Record<string, never>
         Returns: string
       }
+      search_chat_users: {
+        Args: { p_query: string }
+        Returns: Array<{
+          id: string
+          role: UserRole
+          matric_number: string | null
+          name: string
+          programme: string | null
+          profile_image: string | null
+        }>
+      }
+      list_chat_groups: {
+        Args: Record<string, never>
+        Returns: Array<{
+          id: string
+          lecturer_id: string
+          group_name: string
+          created_at: string
+          is_current: boolean
+        }>
+      }
     }
     Enums: {
       user_role: UserRole

@@ -3,6 +3,7 @@ import type { Database } from '@/types/database.types'
 
 type Message = Database['public']['Tables']['messages']['Row']
 type Group = Database['public']['Tables']['mentor_groups']['Row']
+export type ChatGroup = Group & { is_current: boolean }
 
 export async function getMyGroup(lecturerOrMentorId: string): Promise<Group | null> {
   const { data, error } = await supabase
@@ -12,6 +13,12 @@ export async function getMyGroup(lecturerOrMentorId: string): Promise<Group | nu
     .maybeSingle()
   if (error) throw error
   return data
+}
+
+export async function listMyGroups(): Promise<ChatGroup[]> {
+  const { data, error } = await supabase.rpc('list_chat_groups')
+  if (error) throw error
+  return data ?? []
 }
 
 export async function listPersonalMessages(userA: string, userB: string): Promise<Message[]> {
