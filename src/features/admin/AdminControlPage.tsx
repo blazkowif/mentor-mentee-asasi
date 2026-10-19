@@ -305,7 +305,7 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
           name: row[nameColumn],
           role,
           email: row[emailColumn],
-          password: mapping.password ? row[mapping.password] || defaultPassword : defaultPassword,
+          password: defaultPassword,
           matric_number: mapping.matric_number ? row[mapping.matric_number] || null : null,
           phone: mapping.phone ? row[mapping.phone] || null : null,
           mentor_id: mentorId,

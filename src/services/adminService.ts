@@ -121,11 +121,13 @@ async function invokeAuthAdmin(
 
 export async function createManagedUser(user: UserInput): Promise<UserRow> {
   const result = await invokeAuthAdmin('create', user)
+  if (!result.user) throw new Error('Admin function did not return the created user.')
   return result.user
 }
 
 export async function updateManagedUser(id: string, user: Partial<UserInput>): Promise<UserRow> {
   const result = await invokeAuthAdmin('update', { ...user, id })
+  if (!result.user) throw new Error('Admin function did not return the updated user.')
   return result.user
 }
 
