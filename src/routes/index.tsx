@@ -13,6 +13,7 @@ import AdminDashboard from '@/features/admin/AdminDashboard'
 import AssignmentPage from '@/features/admin/AssignmentPage'
 import AdminSearchPage from '@/features/admin/AdminSearchPage'
 import UserDetailPage from '@/features/admin/UserDetailPage'
+import AdminControlPage from '@/features/admin/AdminControlPage'
 
 export default function AppRoutes() {
   return (
@@ -40,6 +41,7 @@ export default function AppRoutes() {
           <Route path="/admin/search" element={<AdminSearchPage />} />
           <Route path="/admin/student/:id" element={<UserDetailPage />} />
           <Route path="/admin/lecturer/:id" element={<UserDetailPage />} />
+          <Route path="/admin/control" element={<AdminControlPage />} />
         </Route>
       </Route>
 

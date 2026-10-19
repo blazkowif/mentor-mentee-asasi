@@ -3,7 +3,8 @@
 -- 2 Admins + 100 Lecturers + 1200 Students across 4 programmes
 --   FS = Asasi Sains | FT = Asasi Teknologi
 --   FA = Asasi Agrisains | FX = Asasi Sains Sosial
--- All dev passwords: "123"
+-- All dev passwords: "123". This seed uses pgcrypto to generate a valid
+-- Supabase-compatible bcrypt hash for the test password.
 -- ============================================================================
 
 begin;
@@ -66,7 +67,7 @@ with instance as (
   select instance_id from auth.users limit 1
 ),
 bcrypt as (
-  select '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LwZdS17hWyW'::text as hash
+  select crypt('123', gen_salt('bf'))::text as hash
 ),
 all_auth as (
   select gen_random_uuid() as id, 'admin' || i || '@ppst.ums.local' as email

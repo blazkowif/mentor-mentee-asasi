@@ -1,7 +1,7 @@
 -- Dummy app data for quick manual testing.
 --
 -- Step 1: Create three Auth users first in Supabase Auth dashboard with these
--- emails and the same password (example: Test123!):
+-- emails and the same test password: 123
 --   - student1@ppst.ums.local
 --   - lecturer1@ppst.ums.local
 --   - admin1@ppst.ums.local
@@ -32,7 +32,7 @@ select
 lecturer.id,
 'lecturer'::user_role,
 'LEC0001',
-  'Test123!',
+  '123',
   'Dr. Nur Amalina',
   null,
   null::uuid,
@@ -44,7 +44,7 @@ select
 admin_user.id,
 'admin'::user_role,
 'ADM0001',
-  'Test123!',
+  '123',
   'Admin PPST',
   null,
   null::uuid,
@@ -56,7 +56,7 @@ select
 student.id,
 'student'::user_role,
 'BS2401001',
-  'Test123!',
+  '123',
   'Aiman Hakim',
   'Asasi Sains',
   lecturer.id,

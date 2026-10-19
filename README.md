@@ -26,8 +26,8 @@ npm run dev
    supabase link --project-ref <your-project-ref>
    supabase db push
    ```
-   (or paste `supabase/migrations/0001_init.sql` then `0002_storage.sql`
-   into the SQL editor, in that order).
+   (or paste the migrations into the SQL editor in filename order, including
+   `0012_admin_global_announcements.sql`).
 3. Create at least one lecturer + one student `auth.users` row (see the
    login design note below), then insert matching `public.users` rows per
    `supabase/seed/seed.sql`, and a `mentor_groups` row for the lecturer, so
@@ -49,25 +49,23 @@ npm run dev
   mentee list), task create/list/delete with a submissions review panel
   (mark reviewed/completed + feedback), announcement create/list/delete,
   same chat/notifications/profile as above.
-- **Admin** — dashboard with lecturer activity (mentee load per lecturer)
-  and a student roster with assigned mentor. Minimal on purpose — see
-  "Not yet built" below for the rest of PRD §14–15.
+- **Admin** — dashboard with lecturer activity and assignment tools, plus
+  `/admin/control` for user creation/deletion, password changes, `.xlsx`/`.xls`
+  /CSV import with column mapping, lecturer-inclusive search, assignment
+  creation/deletion, and global announcement management.
 - **Supabase layer** — full schema, indexes, helper functions, and RLS
   policies for all 8 tables (`supabase/migrations/0001_init.sql`), storage
   buckets + path-scoped policies for all 5 buckets (`0002_storage.sql`).
 
 ## Not yet built
 
-- **Admin**: user import (CSV), mentor (re)assignment UI, report/export
-  (Excel/PDF, PRD §15), login/activity/engagement charts — the
-  `activity_logs` table exists but nothing writes to it yet.
+- **Admin**: report/export (Excel/PDF, PRD §15) and login/activity/engagement
+  charts remain outside this increment.
 - **Notifications**: nothing currently *creates* notification rows (no
   triggers or Edge Function) — the center works once rows exist. The
   `notifications_insert` RLS policy is intentionally permissive for now;
   tighten it once you decide whether inserts come from a trigger, an Edge
   Function, or client-side.
-- **Search** (PRD §16) — `useDebounce` hook is in `src/hooks/`, no query
-  wired to it yet.
 - Real-time presence / "online now" indicators.
 - Lecturer-specific profile fields (Staff ID, Faculty from PRD §17) — the
   shared `users` table (PRD §19) doesn't have columns for these yet.
@@ -84,9 +82,13 @@ npm run dev
 - `src/types/database.types.ts` is hand-authored to match the migration.
   Regenerate it from the live schema once the project is linked:
   `npx supabase gen types typescript --project-id <ref> > src/types/database.types.ts`.
+- Account creation and password changes use the `admin-user` Supabase Edge
+  Function, because the Auth Admin API must never run in the browser. Deploy it
+  after linking with `supabase functions deploy admin-user`. The function uses
+  the project-provided `SUPABASE_SERVICE_ROLE_KEY` secret. The admin account
+  must already exist before it can create other accounts.
 
 
 ## For developer testing
 
 - clone the project and type **npm run dev** to view the machine locally. env file will be provided once u contact me.
-

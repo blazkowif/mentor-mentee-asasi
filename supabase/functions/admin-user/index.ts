@@ -1,0 +1,72 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+type UserPayload = {
+  id?: string
+  name?: string
+  role?: 'student' | 'lecturer' | 'admin'
+  email?: string
+  password?: string
+  matric_number?: string | null
+  programme?: string | null
+  phone?: string | null
+}
+
+Deno.serve(async (request) => {
+  if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  try {
+    const authHeader = request.headers.get('Authorization')
+    if (!authHeader) throw new Error('Missing authorization.')
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const admin = createClient(supabaseUrl, serviceRoleKey)
+    const caller = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: authHeader } } })
+    const { data: callerRole, error: roleError } = await caller.rpc('current_user_role')
+    if (roleError || callerRole !== 'admin') throw new Error('Only administrators may manage accounts.')
+
+    const { action, user } = await request.json() as { action: 'create' | 'update' | 'delete'; user: UserPayload }
+    if (action === 'delete') {
+      if (!user.id) throw new Error('User id is required.')
+      const { error } = await admin.auth.admin.deleteUser(user.id)
+      if (error) throw error
+      return json({ ok: true })
+    }
+    if (!user.name || !user.email || !user.role) throw new Error('Name, role, and email are required.')
+    let id = user.id
+    if (action === 'create') {
+      if (!user.password || user.password.length < 8) throw new Error('Password must contain at least 8 characters.')
+      const result = await admin.auth.admin.createUser({ email: user.email, password: user.password, email_confirm: true })
+      if (result.error) throw result.error
+      id = result.data.user.id
+    } else if (!id) {
+      throw new Error('User id is required.')
+    } else if (user.password) {
+      const result = await admin.auth.admin.updateUserById(id, { password: user.password, email: user.email })
+      if (result.error) throw result.error
+    } else {
+      const result = await admin.auth.admin.updateUserById(id, { email: user.email })
+      if (result.error) throw result.error
+    }
+    const { data: profile, error: profileError } = await admin.from('users').upsert({
+      id,
+      name: user.name,
+      role: user.role,
+      email: user.email,
+      matric_number: user.matric_number ?? null,
+      programme: user.programme ?? null,
+      phone: user.phone ?? null,
+    }).select('id, role, matric_number, name, programme, mentor_id, email, phone, profile_image, address, motto, created_at').single()
+    if (profileError) throw profileError
+    return json({ user: profile })
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : 'Account operation failed.' }, 400)
+  }
+})
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+}

@@ -3,6 +3,17 @@ import type { Database } from '@/types/database.types'
 
 export type UserRow = Database['public']['Tables']['users']['Row']
 export type Programmes = 'Asasi Sains' | 'Asasi Teknologi' | 'Asasi Agrisains' | 'Asasi Sains Sosial'
+export type UserInput = {
+  name: string
+  role: Database['public']['Enums']['user_role']
+  matric_number?: string | null
+  email: string
+  password?: string
+  programme?: string | null
+  phone?: string | null
+  mentor_id?: string | null
+}
+export type AuthUserAction = 'create' | 'update' | 'delete'
 const SAFE_USER_FIELDS = 'id, role, matric_number, name, programme, mentor_id, email, phone, profile_image, address, motto, created_at'
 
 export async function listAllUsers(): Promise<UserRow[]> {
@@ -73,6 +84,53 @@ export async function bulkAssignMentors(studentIds: string[], mentorId: string |
     .select('id')
   if (error) throw error
   return data ?? []
+}
+
+async function invokeAuthAdmin(action: AuthUserAction, user?: Partial<UserInput> & { id?: string }) {
+  const { data, error } = await supabase.functions.invoke('admin-user', {
+    body: { action, user },
+  })
+  if (error) throw error
+  return data as { user: UserRow }
+}
+
+export async function createManagedUser(user: UserInput): Promise<UserRow> {
+  const result = await invokeAuthAdmin('create', user)
+  return result.user
+}
+
+export async function updateManagedUser(id: string, user: Partial<UserInput>): Promise<UserRow> {
+  const result = await invokeAuthAdmin('update', { ...user, id })
+  return result.user
+}
+
+export async function deleteManagedUser(id: string) {
+  await invokeAuthAdmin('delete', { id })
+}
+
+export async function listAllTasks() {
+  const { data, error } = await supabase.from('tasks').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function listAllAnnouncements() {
+  const { data, error } = await supabase
+    .from('announcements')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function createGlobalAnnouncement(adminId: string, title: string, content: string) {
+  const { data, error } = await supabase
+    .from('announcements')
+    .insert({ lecturer_id: adminId, title, content, is_global: true })
+    .select()
+    .single()
+  if (error) throw error
+  return data
 }
 
 export async function autoAssignMentors(options?: { programme?: string }) {

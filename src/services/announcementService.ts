@@ -19,7 +19,7 @@ export async function listAnnouncementsByMentor(mentorId: string): Promise<Annou
   const { data, error } = await supabase
     .from('announcements')
     .select('*')
-    .eq('lecturer_id', mentorId)
+    .or(`lecturer_id.eq.${mentorId},is_global.eq.true`)
     .order('created_at', { ascending: false })
   if (error) throw error
   return data

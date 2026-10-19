@@ -102,6 +102,7 @@ export interface Database {
         Row: {
           id: string
           lecturer_id: string
+          is_global: boolean
           title: string
           content: string | null
           attachment: string | null
