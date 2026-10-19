@@ -15,6 +15,16 @@ type UserPayload = {
   programme?: string | null
   phone?: string | null
   mentor_id?: string | null
+  ic_number?: string | null
+  gender?: string | null
+  religion?: string | null
+  race?: string | null
+  address?: string | null
+  postcode?: string | null
+  city?: string | null
+  state?: string | null
+  study_status?: string | null
+  channel?: string | null
 }
 
 Deno.serve(async (request) => {
@@ -82,7 +92,17 @@ Deno.serve(async (request) => {
       programme: user.programme ?? null,
       phone: user.phone ?? null,
       mentor_id: user.mentor_id ?? null,
-    }).select('id, role, matric_number, name, programme, mentor_id, email, phone, profile_image, address, motto, created_at').single()
+      ic_number: user.ic_number ?? null,
+      gender: user.gender ?? null,
+      religion: user.religion ?? null,
+      race: user.race ?? null,
+      address: user.address ?? null,
+      postcode: user.postcode ?? null,
+      city: user.city ?? null,
+      state: user.state ?? null,
+      study_status: user.study_status ?? null,
+      channel: user.channel ?? null,
+    }).select('id, role, matric_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, channel, motto, created_at').single()
     if (profileError) throw profileError
     return json({ user: profile })
   } catch (error) {

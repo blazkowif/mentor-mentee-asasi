@@ -27,7 +27,8 @@ npm run dev
    supabase db push
    ```
    (or paste the migrations into the SQL editor in filename order, including
-   `0012_admin_global_announcements.sql`).
+   `0012_admin_global_announcements.sql`, `0013_student_import_fields.sql`,
+   and `0014_student_import_channel.sql`).
 3. Create at least one lecturer + one student `auth.users` row (see the
    login design note below), then insert matching `public.users` rows per
    `supabase/seed/seed.sql`, and a `mentor_groups` row for the lecturer, so
@@ -51,8 +52,11 @@ npm run dev
   same chat/notifications/profile as above.
 - **Admin** — dashboard with lecturer activity and assignment tools, plus
   `/admin/control` for user creation/deletion, password changes, `.xlsx`/`.xls`
-  /CSV import with column mapping, lecturer-inclusive search, assignment
-  creation/deletion, and global announcement management.
+  /CSV import with Malay student-field mapping, selectable password source
+  (KP is selected automatically), lecturer-inclusive search, assignment
+  creation/deletion, and global announcement management. Since the requested
+  student format has no email column, imports generate the login email from
+  `Nomatrik` (for example `a12345@student.local`).
 - **Supabase layer** — full schema, indexes, helper functions, and RLS
   policies for all 8 tables (`supabase/migrations/0001_init.sql`), storage
   buckets + path-scoped policies for all 5 buckets (`0002_storage.sql`).

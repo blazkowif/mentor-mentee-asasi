@@ -11,7 +11,10 @@ import type { Database } from '@/types/database.types'
 import AssignmentPage from './AssignmentPage'
 
 type Role = Database['public']['Enums']['user_role']
-type ImportField = 'name' | 'matric_number' | 'phone' | 'email' | 'mentor'
+type ImportField =
+  | 'matric_number' | 'ic_number' | 'name' | 'gender' | 'religion' | 'race'
+  | 'phone' | 'programme' | 'channel' | 'address' | 'postcode' | 'city' | 'state'
+  | 'study_status' | 'mentor'
 type UserForm = {
   name: string
   role: Role
@@ -31,7 +34,10 @@ const emptyForm: UserForm = {
   programme: '',
   phone: '',
 }
-const importFields: ImportField[] = ['name', 'matric_number', 'phone', 'email', 'mentor']
+const importFields: ImportField[] = [
+  'matric_number', 'ic_number', 'name', 'gender', 'religion', 'race', 'phone',
+  'programme', 'channel', 'address', 'postcode', 'city', 'state', 'study_status', 'mentor',
+]
 const DELETE_STUDENTS_PHRASE = 'I-hereby-ending-this-session'
 
 export default function AdminControlPage() {
@@ -262,6 +268,7 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
   const [rows, setRows] = useState<Record<string, string>[]>([])
   const [mapping, setMapping] = useState<Partial<Record<ImportField, string>>>({})
   const [defaultPassword, setDefaultPassword] = useState('')
+  const [passwordColumn, setPasswordColumn] = useState('')
   const [role, setRole] = useState<Role>('student')
   const [importing, setImporting] = useState(false)
 
@@ -275,7 +282,31 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
       const nextHeaders = records.length ? Object.keys(records[0]) : []
       setHeaders(nextHeaders)
       setRows(records.map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value)]))))
-      setMapping({})
+      const defaultMapping: Partial<Record<ImportField, string>> = {}
+      const aliases: Partial<Record<ImportField, string[]>> = {
+        matric_number: ['nomatrik', 'no matrik', 'matric number'],
+        ic_number: ['kp', 'kad pengenalan', 'ic number'],
+        name: ['nama', 'name'],
+        gender: ['jantina', 'gender'],
+        religion: ['agamabm', 'agama', 'religion'],
+        race: ['kaumbm', 'kaum', 'race'],
+        phone: ['notelbimbit', 'no telefon', 'phone'],
+        programme: ['nama program', 'program', 'programme'],
+        channel: ['saluran', 'channel'],
+        address: ['alamat', 'address'],
+        postcode: ['poskod', 'postcode'],
+        city: ['bandar', 'city'],
+        state: ['negeri', 'state'],
+        study_status: ['status pengajian', 'study status'],
+        mentor: ['mentor'],
+      }
+      for (const field of importFields) {
+        const accepted = aliases[field] ?? [field]
+        const header = nextHeaders.find((value) => accepted.includes(value.trim().toLowerCase()))
+        if (header) defaultMapping[field] = header
+      }
+      setMapping(defaultMapping)
+      setPasswordColumn(nextHeaders.find((value) => value.trim().toLowerCase() === 'kp') ?? '')
       onMessage(`${records.length} rows loaded. Map the columns before importing.`)
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Unable to read spreadsheet.')
@@ -284,37 +315,70 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
 
   async function importUsers() {
     const nameColumn = mapping.name
-    const emailColumn = mapping.email
-    if (!nameColumn || !emailColumn || !defaultPassword || defaultPassword.length < 8) {
-      onError('Map Name and Email, and provide a default password of at least 8 characters.')
+    const matricColumn = mapping.matric_number
+    if (!nameColumn || !matricColumn || !passwordColumn) {
+      onError('Map Nomatrik and Nama, then choose a password column.')
       return
     }
     setImporting(true)
     try {
-      for (const row of rows) {
-        const mentorValue = mapping.mentor ? row[mapping.mentor].trim() : ''
-        let mentorId: string | null = null
-        if (mentorValue) {
-          const mentor = await adminService.findUserByIdentifier(mentorValue)
-          if (!mentor || mentor.role !== 'lecturer') {
-            throw new Error(`Mentor "${mentorValue}" was not found as a lecturer for ${row[nameColumn]}.`)
+      let imported = 0
+      const failures: string[] = []
+      for (const [index, row] of rows.entries()) {
+        const rowNumber = index + 2
+        try {
+          const name = row[nameColumn].trim()
+          const matricNumber = row[matricColumn].trim()
+          const email = `${matricNumber.toLowerCase().replace(/[^a-z0-9]+/g, '')}@student.local`
+          const password = row[passwordColumn].trim() || defaultPassword.trim()
+          if (!name || !matricNumber || !email || !password) {
+            throw new Error('Nomatrik, Nama, and the selected password value are required.')
           }
-          mentorId = mentor.id
+          if (password.length < 8) {
+            throw new Error('Password must contain at least 8 characters.')
+          }
+          const mentorValue = mapping.mentor ? row[mapping.mentor].trim() : ''
+          let mentorId: string | null = null
+          if (mentorValue) {
+            const mentor = await adminService.findUserByIdentifier(mentorValue)
+            if (!mentor || mentor.role !== 'lecturer') {
+              throw new Error(`Mentor "${mentorValue}" was not found as a lecturer.`)
+            }
+            mentorId = mentor.id
+          }
+          await adminService.createManagedUser({
+            name,
+            role,
+            email,
+            password,
+            matric_number: matricNumber,
+            mentor_id: mentorId,
+            ic_number: mapping.ic_number ? row[mapping.ic_number] || null : null,
+            gender: mapping.gender ? row[mapping.gender] || null : null,
+            religion: mapping.religion ? row[mapping.religion] || null : null,
+            race: mapping.race ? row[mapping.race] || null : null,
+            phone: mapping.phone ? row[mapping.phone] || null : null,
+            programme: mapping.programme ? row[mapping.programme] || null : null,
+            address: mapping.address ? row[mapping.address] || null : null,
+            postcode: mapping.postcode ? row[mapping.postcode] || null : null,
+            city: mapping.city ? row[mapping.city] || null : null,
+            state: mapping.state ? row[mapping.state] || null : null,
+            study_status: mapping.study_status ? row[mapping.study_status] || null : null,
+            channel: mapping.channel ? row[mapping.channel] || null : null,
+          })
+          imported += 1
+        } catch (err) {
+          failures.push(`Row ${rowNumber} (${row[nameColumn] || 'unnamed'}): ${err instanceof Error ? err.message : 'unknown error'}`)
         }
-        await adminService.createManagedUser({
-          name: row[nameColumn],
-          role,
-          email: row[emailColumn],
-          password: defaultPassword,
-          matric_number: mapping.matric_number ? row[mapping.matric_number] || null : null,
-          phone: mapping.phone ? row[mapping.phone] || null : null,
-          mentor_id: mentorId,
-        })
       }
       onComplete()
-      onMessage(`${rows.length} users imported successfully.`)
+      if (failures.length) {
+        onError(`${imported} of ${rows.length} imported. Failed rows:\n${failures.slice(0, 10).join('\n')}${failures.length > 10 ? `\n…and ${failures.length - 10} more.` : ''}`)
+      } else {
+        onMessage(`${imported} users imported successfully.`)
+      }
     } catch (err) {
-      onError(err instanceof Error ? err.message : 'Import failed. No silent rows were skipped.')
+      onError(err instanceof Error ? err.message : 'Import failed before rows could be processed.')
     } finally {
       setImporting(false)
     }
@@ -322,12 +386,13 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
 
   return <section className="max-w-3xl rounded-lg bg-white p-5 shadow-sm">
     <h2 className="font-semibold">Import users from Excel</h2>
-    <p className="mb-4 text-sm text-gray-500">Upload .xlsx, .xls, or .csv, then map the columns you want to use. Mentor mapping is optional.</p>
+    <p className="mb-4 text-sm text-gray-500">Upload the student file, map the requested fields, and choose which column supplies each password. KP is selected automatically when that header exists. Login emails are generated from Nomatrik because this format has no email column.</p>
     <input type="file" accept=".xlsx,.xls,.csv" onChange={readFile} className="mb-4 block text-sm" />
     {headers.length > 0 && <div className="space-y-3">
       <label className="block text-sm font-medium text-gray-700">Role for this import<select className="mt-1 w-full rounded border px-3 py-2" value={role} onChange={(event) => setRole(event.target.value as Role)}><option value="student">Student</option><option value="lecturer">Lecturer</option><option value="admin">Admin</option></select></label>
-      {importFields.map((field) => <label key={field} className="flex items-center gap-3 text-sm"><span className="w-32 capitalize">{field.replace('_', ' ')}</span><select className="flex-1 rounded border px-2 py-1.5" value={mapping[field] ?? ''} onChange={(event) => setMapping((previous) => ({ ...previous, [field]: event.target.value || undefined }))}><option value="">Do not import</option>{headers.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>)}
-      <label className="block text-sm">Default password<input type="password" minLength={8} className="mt-1 w-full rounded border px-3 py-2" value={defaultPassword} onChange={(event) => setDefaultPassword(event.target.value)} /></label>
+      <label className="block text-sm font-medium text-gray-700">Password column<select className="mt-1 w-full rounded border px-3 py-2" value={passwordColumn} onChange={(event) => setPasswordColumn(event.target.value)}><option value="">Choose a column</option>{headers.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>
+      {importFields.map((field) => <label key={field} className="flex items-center gap-3 text-sm"><span className="w-32">{field === 'matric_number' ? 'Nomatrik' : field === 'ic_number' ? 'KP' : field.replace('_', ' ')}</span><select className="flex-1 rounded border px-2 py-1.5" value={mapping[field] ?? ''} onChange={(event) => setMapping((previous) => ({ ...previous, [field]: event.target.value || undefined }))}><option value="">Do not import</option>{headers.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>)}
+      <label className="block text-sm">Fallback password (optional; used only when a row's selected password is blank)<input type="password" minLength={8} className="mt-1 w-full rounded border px-3 py-2" value={defaultPassword} onChange={(event) => setDefaultPassword(event.target.value)} /></label>
       <button disabled={importing || rows.length === 0} onClick={importUsers} className="rounded bg-ums-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{importing ? `Importing ${rows.length} users…` : `Import ${rows.length} users`}</button>
     </div>}
   </section>

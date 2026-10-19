@@ -12,9 +12,19 @@ export type UserInput = {
   programme?: string | null
   phone?: string | null
   mentor_id?: string | null
+  ic_number?: string | null
+  gender?: string | null
+  religion?: string | null
+  race?: string | null
+  address?: string | null
+  postcode?: string | null
+  city?: string | null
+  state?: string | null
+  study_status?: string | null
+  channel?: string | null
 }
 export type AuthUserAction = 'create' | 'update' | 'delete' | 'delete_all_students'
-const SAFE_USER_FIELDS = 'id, role, matric_number, name, programme, mentor_id, email, phone, profile_image, address, motto, created_at'
+const SAFE_USER_FIELDS = 'id, role, matric_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, channel, motto, created_at'
 
 export async function listAllUsers(): Promise<UserRow[]> {
   const { data, error } = await supabase

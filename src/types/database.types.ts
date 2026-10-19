@@ -16,14 +16,22 @@ export interface Database {
     id: string
     role: UserRole
     matric_number: string | null
-    ic_number?: string | null
+    ic_number: string | null
     name: string
+    gender: string | null
+    religion: string | null
+    race: string | null
     programme: string | null
     mentor_id: string | null
     email: string | null
     phone: string | null
-    profile_image: string | null
     address: string | null
+    postcode: string | null
+    city: string | null
+    state: string | null
+    study_status: string | null
+    channel: string | null
+    profile_image: string | null
     motto: string | null
     created_at: string
   }
