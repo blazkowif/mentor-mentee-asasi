@@ -1,5 +1,6 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { useAuthStore } from '@/features/auth/authStore'
 import * as adminService from '@/services/adminService'
@@ -7,9 +8,10 @@ import * as taskService from '@/services/taskService'
 import * as announcementService from '@/services/announcementService'
 import { queryKeys } from '@/lib/queryKeys'
 import type { Database } from '@/types/database.types'
+import AssignmentPage from './AssignmentPage'
 
 type Role = Database['public']['Enums']['user_role']
-type ImportField = 'name' | 'role' | 'email' | 'password' | 'matric_number' | 'programme' | 'phone'
+type ImportField = 'name' | 'matric_number' | 'phone' | 'email' | 'mentor'
 type UserForm = {
   name: string
   role: Role
@@ -29,17 +31,24 @@ const emptyForm: UserForm = {
   programme: '',
   phone: '',
 }
-const importFields: ImportField[] = ['name', 'role', 'email', 'password', 'matric_number', 'programme', 'phone']
+const importFields: ImportField[] = ['name', 'matric_number', 'phone', 'email', 'mentor']
+const DELETE_STUDENTS_PHRASE = 'I-hereby-ending-this-session'
 
 export default function AdminControlPage() {
   const currentUser = useAuthStore((state) => state.user)
   const queryClient = useQueryClient()
-  const [tab, setTab] = useState<'users' | 'import' | 'content'>('users')
+  const [searchParams] = useSearchParams()
+  const initialTab = searchParams.get('tab')
+  const [tab, setTab] = useState<'users' | 'assignment' | 'import' | 'content'>(
+    initialTab === 'assignment' || initialTab === 'import' || initialTab === 'content' ? initialTab : 'users',
+  )
   const [form, setForm] = useState<UserForm>(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showDeleteStudents, setShowDeleteStudents] = useState(false)
+  const [deleteStudentsPhrase, setDeleteStudentsPhrase] = useState('')
 
   const usersQuery = useQuery({
     queryKey: queryKeys.users.all(),
@@ -95,6 +104,17 @@ export default function AdminControlPage() {
     },
     onError: (err) => setError(err instanceof Error ? err.message : 'Unable to delete user.'),
   })
+  const deleteAllStudents = useMutation({
+    mutationFn: () => adminService.deleteAllStudents(deleteStudentsPhrase),
+    onSuccess: (deleted) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all() })
+      setDeleteStudentsPhrase('')
+      setShowDeleteStudents(false)
+      setMessage(`${deleted} student account${deleted === 1 ? '' : 's'} deleted.`)
+      setError(null)
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : 'Unable to delete all students.'),
+  })
 
   function updateForm(field: keyof UserForm, value: string) {
     setForm((previous) => ({ ...previous, [field]: value }))
@@ -130,6 +150,7 @@ export default function AdminControlPage() {
       <nav className="flex flex-wrap gap-2 border-b border-gray-200">
         {([
           ['users', 'Users & passwords'],
+          ['assignment', 'Reassign mentors'],
           ['import', 'Excel import'],
           ['content', 'Tasks & announcements'],
         ] as const).map(([key, label]) => (
@@ -140,6 +161,12 @@ export default function AdminControlPage() {
       </nav>
       {message && <p className="rounded bg-green-50 px-3 py-2 text-sm text-green-700">{message}</p>}
       {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {usersQuery.isError && (
+        <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">
+          Could not load users: {usersQuery.error instanceof Error ? usersQuery.error.message : 'Supabase returned an unknown error.'}
+          Check that the logged-in profile exists in public.users and has role admin.
+        </p>
+      )}
 
       {tab === 'users' && (
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -165,6 +192,48 @@ export default function AdminControlPage() {
               {!usersQuery.isLoading && filteredUsers.length === 0 && <p className="py-6 text-sm text-gray-500">No matching users.</p>}
             </div>
           </div>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 shadow-sm">
+            <h2 className="font-semibold text-red-800">Danger zone</h2>
+            <p className="mt-1 text-sm text-red-700">
+              Delete every student account and their related data. Lecturers and administrators are not affected.
+            </p>
+            {!showDeleteStudents ? (
+              <button
+                type="button"
+                onClick={() => setShowDeleteStudents(true)}
+                disabled={usersQuery.isLoading || users.filter((user) => user.role === 'student').length === 0}
+                className="mt-3 rounded border border-red-300 px-3 py-2 text-sm font-medium text-red-700 disabled:opacity-50"
+              >
+                Delete all students ({users.filter((user) => user.role === 'student').length})
+              </button>
+            ) : (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs font-medium text-red-800">
+                  Type exactly: <code>{DELETE_STUDENTS_PHRASE}</code>
+                </p>
+                <input
+                  className="w-full rounded border border-red-300 bg-white px-3 py-2 text-sm"
+                  value={deleteStudentsPhrase}
+                  onChange={(event) => setDeleteStudentsPhrase(event.target.value)}
+                  placeholder={DELETE_STUDENTS_PHRASE}
+                  autoComplete="off"
+                />
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => { setShowDeleteStudents(false); setDeleteStudentsPhrase('') }} className="rounded px-3 py-2 text-sm text-gray-700">
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deleteStudentsPhrase !== DELETE_STUDENTS_PHRASE || deleteAllStudents.isPending}
+                    onClick={() => deleteAllStudents.mutate()}
+                    className="rounded bg-red-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  >
+                    {deleteAllStudents.isPending ? 'Deleting students…' : 'Confirm permanent deletion'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <form onSubmit={submitUser} className="rounded-lg bg-white p-4 shadow-sm">
             <h2 className="mb-3 font-semibold">{editingId ? 'Edit user' : 'Add user'}</h2>
             <div className="space-y-3">
@@ -182,6 +251,7 @@ export default function AdminControlPage() {
       )}
 
       {tab === 'import' && <SpreadsheetImport onComplete={() => queryClient.invalidateQueries({ queryKey: queryKeys.users.all() })} onMessage={setMessage} onError={setError} />}
+      {tab === 'assignment' && <AssignmentPage />}
       {tab === 'content' && <ContentManager users={users} tasks={tasksQuery.data ?? []} announcements={announcementsQuery.data ?? []} adminId={currentUser?.id ?? ''} onMessage={setMessage} onError={setError} />}
     </div>
   )
@@ -192,6 +262,7 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
   const [rows, setRows] = useState<Record<string, string>[]>([])
   const [mapping, setMapping] = useState<Partial<Record<ImportField, string>>>({})
   const [defaultPassword, setDefaultPassword] = useState('')
+  const [role, setRole] = useState<Role>('student')
   const [importing, setImporting] = useState(false)
 
   async function readFile(event: ChangeEvent<HTMLInputElement>) {
@@ -221,16 +292,23 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
     setImporting(true)
     try {
       for (const row of rows) {
-        const role = (mapping.role ? row[mapping.role] : 'student') as Role
-        if (!['student', 'lecturer', 'admin'].includes(role)) throw new Error(`Invalid role in row for ${row[nameColumn]}.`)
+        const mentorValue = mapping.mentor ? row[mapping.mentor].trim() : ''
+        let mentorId: string | null = null
+        if (mentorValue) {
+          const mentor = await adminService.findUserByIdentifier(mentorValue)
+          if (!mentor || mentor.role !== 'lecturer') {
+            throw new Error(`Mentor "${mentorValue}" was not found as a lecturer for ${row[nameColumn]}.`)
+          }
+          mentorId = mentor.id
+        }
         await adminService.createManagedUser({
           name: row[nameColumn],
           role,
           email: row[emailColumn],
           password: mapping.password ? row[mapping.password] || defaultPassword : defaultPassword,
           matric_number: mapping.matric_number ? row[mapping.matric_number] || null : null,
-          programme: mapping.programme ? row[mapping.programme] || null : null,
           phone: mapping.phone ? row[mapping.phone] || null : null,
+          mentor_id: mentorId,
         })
       }
       onComplete()
@@ -244,9 +322,10 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
 
   return <section className="max-w-3xl rounded-lg bg-white p-5 shadow-sm">
     <h2 className="font-semibold">Import users from Excel</h2>
-    <p className="mb-4 text-sm text-gray-500">Upload .xlsx, .xls, or .csv, then explicitly map each field. Existing accounts are not overwritten.</p>
+    <p className="mb-4 text-sm text-gray-500">Upload .xlsx, .xls, or .csv, then map the columns you want to use. Mentor mapping is optional.</p>
     <input type="file" accept=".xlsx,.xls,.csv" onChange={readFile} className="mb-4 block text-sm" />
     {headers.length > 0 && <div className="space-y-3">
+      <label className="block text-sm font-medium text-gray-700">Role for this import<select className="mt-1 w-full rounded border px-3 py-2" value={role} onChange={(event) => setRole(event.target.value as Role)}><option value="student">Student</option><option value="lecturer">Lecturer</option><option value="admin">Admin</option></select></label>
       {importFields.map((field) => <label key={field} className="flex items-center gap-3 text-sm"><span className="w-32 capitalize">{field.replace('_', ' ')}</span><select className="flex-1 rounded border px-2 py-1.5" value={mapping[field] ?? ''} onChange={(event) => setMapping((previous) => ({ ...previous, [field]: event.target.value || undefined }))}><option value="">Do not import</option>{headers.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>)}
       <label className="block text-sm">Default password<input type="password" minLength={8} className="mt-1 w-full rounded border px-3 py-2" value={defaultPassword} onChange={(event) => setDefaultPassword(event.target.value)} /></label>
       <button disabled={importing || rows.length === 0} onClick={importUsers} className="rounded bg-ums-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{importing ? `Importing ${rows.length} users…` : `Import ${rows.length} users`}</button>
@@ -284,7 +363,13 @@ function ContentManager({ users, tasks, announcements, adminId, onMessage, onErr
       setTitle('')
       setContent('')
       onMessage('Global announcement posted.')
-    } catch (err) { onError(err instanceof Error ? err.message : 'Unable to post announcement.') } finally { setBusy(false) }
+    } catch (err) {
+      onError(
+        err instanceof Error
+          ? `${err.message} Make sure migration 0012_admin_global_announcements.sql has been applied.`
+          : 'Unable to post announcement. Apply migration 0012_admin_global_announcements.sql first.',
+      )
+    } finally { setBusy(false) }
   }
   async function removeTask(id: string) {
     try { await taskService.deleteTask(id); await queryClient.invalidateQueries({ queryKey: ['admin', 'tasks'] }); onMessage('Assignment deleted.') } catch (err) { onError(err instanceof Error ? err.message : 'Unable to delete assignment.') }

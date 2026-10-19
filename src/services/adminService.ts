@@ -13,7 +13,7 @@ export type UserInput = {
   phone?: string | null
   mentor_id?: string | null
 }
-export type AuthUserAction = 'create' | 'update' | 'delete'
+export type AuthUserAction = 'create' | 'update' | 'delete' | 'delete_all_students'
 const SAFE_USER_FIELDS = 'id, role, matric_number, name, programme, mentor_id, email, phone, profile_image, address, motto, created_at'
 
 export async function listAllUsers(): Promise<UserRow[]> {
@@ -65,6 +65,28 @@ export async function searchUsers(query: string): Promise<UserRow[]> {
   return data ?? []
 }
 
+export async function findUserByIdentifier(identifier: string): Promise<UserRow | null> {
+  const value = identifier.trim()
+  if (!value) return null
+  const fields = [
+    ['id', value],
+    ['email', value],
+    ['matric_number', value],
+    ['name', value],
+  ] as const
+  for (const [field, candidate] of fields) {
+    const { data, error } = await supabase
+      .from('users')
+      .select(SAFE_USER_FIELDS)
+      .eq(field, candidate)
+      .limit(2)
+    if (error) throw error
+    if (data?.length === 1) return data[0]
+    if (data && data.length > 1) throw new Error(`Mentor value "${value}" matches more than one user.`)
+  }
+  return null
+}
+
 export async function getUserActivity(userId: string, limit = 20): Promise<any[]> {
   const { data, error } = await supabase
     .from('activity_logs')
@@ -86,12 +108,15 @@ export async function bulkAssignMentors(studentIds: string[], mentorId: string |
   return data ?? []
 }
 
-async function invokeAuthAdmin(action: AuthUserAction, user?: Partial<UserInput> & { id?: string }) {
+async function invokeAuthAdmin(
+  action: AuthUserAction,
+  user?: Partial<UserInput> & { id?: string; confirmation?: string },
+) {
   const { data, error } = await supabase.functions.invoke('admin-user', {
     body: { action, user },
   })
   if (error) throw error
-  return data as { user: UserRow }
+  return data as { user?: UserRow; deleted?: number }
 }
 
 export async function createManagedUser(user: UserInput): Promise<UserRow> {
@@ -106,6 +131,11 @@ export async function updateManagedUser(id: string, user: Partial<UserInput>): P
 
 export async function deleteManagedUser(id: string) {
   await invokeAuthAdmin('delete', { id })
+}
+
+export async function deleteAllStudents(confirmation: string): Promise<number> {
+  const result = await invokeAuthAdmin('delete_all_students', { confirmation })
+  return result.deleted ?? 0
 }
 
 export async function listAllTasks() {

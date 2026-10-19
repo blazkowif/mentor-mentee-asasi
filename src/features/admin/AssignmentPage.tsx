@@ -20,6 +20,7 @@ export default function AssignmentPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [page, setPage] = useState(1)
   const pageSize = 50
+  const [error, setError] = useState<string | null>(null)
 
   const {
     data: students = [],
@@ -35,6 +36,31 @@ export default function AssignmentPage() {
   } = useQuery({
     queryKey: queryKeys.admin.mentors(),
     queryFn: adminService.getAvailableMentors,
+  })
+  const qc = useQueryClient()
+  const assign = useMutation({
+    mutationFn: ({ ids, mentorId }: { ids: string[]; mentorId: string | null }) =>
+    adminService.bulkAssignMentors(ids, mentorId),
+    onSuccess: () => {
+    setSelectedIds(new Set())
+    setError(null)
+    qc.invalidateQueries({ queryKey: queryKeys.users.all() })
+    qc.invalidateQueries({ queryKey: queryKeys.admin.all })
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : 'Unable to reassign mentors.'),
+  })
+  const autoAssign = useMutation({
+    mutationFn: () =>
+    adminService.autoAssignMentors(
+      programme === 'all' ? undefined : { programme },
+    ),
+    onSuccess: () => {
+    setError(null)
+    qc.invalidateQueries({ queryKey: queryKeys.users.all() })
+    qc.invalidateQueries({ queryKey: queryKeys.admin.all })
+    qc.invalidateQueries({ queryKey: queryKeys.admin.students(programme === 'all' ? undefined : programme) })
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : 'Unable to auto-assign mentors.'),
   })
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -56,25 +82,6 @@ export default function AssignmentPage() {
     return <p className="text-sm text-gray-500">Loading…</p>
   }
 
-  const qc = useQueryClient()
-  const assign = useMutation({
-    mutationFn: ({ ids, mentorId }: { ids: string[]; mentorId: string | null }) =>
-      adminService.bulkAssignMentors(ids, mentorId),
-    onSuccess: () => {
-      setSelectedIds(new Set())
-      qc.invalidateQueries({ queryKey: queryKeys.admin.all })
-    },
-  })
-  const autoAssign = useMutation({
-    mutationFn: () =>
-      adminService.autoAssignMentors(
-        programme === 'all' ? undefined : { programme },
-      ),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.admin.all })
-    },
-  })
-
   const toggle = (id: string) => {
     const next = new Set(selectedIds)
     if (next.has(id)) next.delete(id)
@@ -90,6 +97,7 @@ export default function AssignmentPage() {
   return (
     <div>
       <h1 className="mb-4 text-lg font-semibold text-gray-900">Assignment</h1>
+      {error && <p className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="mb-4 flex flex-wrap gap-2">
         {PROGRAMMES.map((p) => (
@@ -222,7 +230,7 @@ export default function AssignmentPage() {
               if (e.target.value && selectedIds.size) {
                 assign.mutate({
                   ids: Array.from(selectedIds),
-                  mentorId: e.target.value,
+                  mentorId: e.target.value === '__null__' ? null : e.target.value,
                 })
                 e.target.value = ''
               }

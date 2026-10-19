@@ -99,8 +99,7 @@ export default function ProfileSidebar() {
             {user.role === 'admin' && (
               <>
                 <NavItem to="/admin/dashboard" label="Admin Dashboard" />
-                <NavItem to="/admin/assignment" label="Assignment" />
-                <NavItem to="/admin/search" label="Search" />
+                <NavItem to="/admin/control" label="Admin Control" />
               </>
             )}
           </nav>
