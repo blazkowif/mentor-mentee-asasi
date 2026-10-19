@@ -66,7 +66,7 @@ export async function searchUsers(query: string): Promise<UserRow[]> {
   if (!safeQuery) return []
   const { data, error } = await supabase
     .from('users')
-    .select('id, role, matric_number, name, programme, mentor_id, email, phone, profile_image, address, motto, created_at')
+    .select(SAFE_USER_FIELDS)
     .or(`name.ilike.%${safeQuery}%,email.ilike.%${safeQuery}%,matric_number.ilike.%${safeQuery}%`)
     .order('role')
     .order('name')

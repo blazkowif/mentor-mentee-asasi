@@ -4,7 +4,7 @@ import type { Database } from '@/types/database.types'
 type UserRow = Database['public']['Tables']['users']['Row']
 export type ProfilePatch = Partial<Pick<UserRow, 'name' | 'phone' | 'address' | 'motto' | 'profile_image'>>
 export type ChatDirectoryUser = Pick<UserRow, 'id' | 'role' | 'matric_number' | 'name' | 'programme' | 'profile_image'>
-const SAFE_USER_FIELDS = 'id, role, matric_number, name, programme, mentor_id, email, phone, profile_image, address, motto, created_at'
+const SAFE_USER_FIELDS = 'id, role, matric_number, ic_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, channel, motto, created_at'
 
 export async function getMentees(lecturerId: string): Promise<UserRow[]> {
   const { data, error } = await supabase
