@@ -1,4 +1,4 @@
-# UMS PPST — Mentor-Mentee Management System
+npm installnpm installnpm install# UMS PPST — Mentor-Mentee Management System
 
 A **working template** built from the project PRD (v1.0) — real data flows
 against Supabase, not just static UI. Verified with `tsc -b` (clean) and
@@ -51,12 +51,19 @@ npm run dev
   (mark reviewed/completed + feedback), announcement create/list/delete,
   same chat/notifications/profile as above.
 - **Admin** — dashboard with lecturer activity and assignment tools, plus
-  `/admin/control` for user creation/deletion, password changes, `.xlsx`/`.xls`
-  /CSV import with Malay student-field mapping, selectable password source
-  (KP is selected automatically), lecturer-inclusive search, assignment
-  creation/deletion, and global announcement management. Since the requested
-  student format has no email column, imports generate the login email from
-  `Nomatrik` (for example `a12345@student.local`).
+  `/admin/control` for user creation/deletion, password changes, full student
+  profile/login editing, and `.xlsx`/`.xls`/CSV student and mentor import.
+  Imports
+  automatically suggest mappings for the Malay headers (`Nomatrik`, `KP`,
+  `Nama`, `Jantina`, `AgamaBM`, `KaumBM`, `NoTelBimBit`, `Nama program`,
+  `Saluran`, `Alamat`, `Poskod`, `Bandar`, `Negeri`), while administrators can
+  select a different source column for every field. Passwords can be one
+  manually chosen default or read from a selected data column. Student
+  imports use the `Nomatrik` value as the student login ID; mentor imports
+  require an email column for staff login. Supabase Auth still receives a
+  private synthetic email internally because its password API requires one,
+  but students and administrators only see and enter the matric number.
+  A progress indicator reports imported and failed rows.
 - **Supabase layer** — full schema, indexes, helper functions, and RLS
   policies for all 8 tables (`supabase/migrations/0001_init.sql`), storage
   buckets + path-scoped policies for all 5 buckets (`0002_storage.sql`).
@@ -91,6 +98,11 @@ npm run dev
   after linking with `supabase functions deploy admin-user`. The function uses
   the project-provided `SUPABASE_SERVICE_ROLE_KEY` secret. The admin account
   must already exist before it can create other accounts.
+- After applying migrations, deploy the account-management function and ensure
+  its project-provided `SUPABASE_SERVICE_ROLE_KEY` secret is available:
+  `supabase functions deploy admin-user`. If imports fail with an authorization
+  or function error, this deployment and the logged-in administrator profile
+  are the first things to verify.
 
 
 ## For developer testing

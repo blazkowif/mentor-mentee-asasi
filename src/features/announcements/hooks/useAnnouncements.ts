@@ -16,8 +16,8 @@ export function useLecturerAnnouncements(lecturerId: string | undefined) {
 export function useMentorAnnouncements(mentorId: string | null | undefined) {
   return useQuery({
     queryKey: queryKeys.announcements.byMentor(mentorId ?? ''),
-    queryFn: () => announcementService.listAnnouncementsByMentor(mentorId!),
-    enabled: !!mentorId,
+    queryFn: () => announcementService.listAnnouncementsByMentor(mentorId ?? null),
+    enabled: true,
   })
 }
 

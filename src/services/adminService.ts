@@ -1,13 +1,15 @@
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/types/database.types'
 
-export type UserRow = Database['public']['Tables']['users']['Row']
+export type UserRow = Omit<Database['public']['Tables']['users']['Row'], 'ic_number'> & {
+  ic_number?: string | null
+}
 export type Programmes = 'Asasi Sains' | 'Asasi Teknologi' | 'Asasi Agrisains' | 'Asasi Sains Sosial'
 export type UserInput = {
   name: string
   role: Database['public']['Enums']['user_role']
   matric_number?: string | null
-  email: string
+  email?: string | null
   password?: string
   programme?: string | null
   phone?: string | null
@@ -22,8 +24,9 @@ export type UserInput = {
   state?: string | null
   study_status?: string | null
   channel?: string | null
+  motto?: string | null
 }
-export type AuthUserAction = 'create' | 'update' | 'delete' | 'delete_all_students'
+export type AuthUserAction = 'create' | 'update' | 'delete' | 'delete_all_students' | 'delete_all_mentors'
 const SAFE_USER_FIELDS = 'id, role, matric_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, channel, motto, created_at'
 
 export async function listAllUsers(): Promise<UserRow[]> {
@@ -125,8 +128,20 @@ async function invokeAuthAdmin(
   const { data, error } = await supabase.functions.invoke('admin-user', {
     body: { action, user },
   })
-  if (error) throw error
-  return data as { user?: UserRow; deleted?: number }
+  if (error) {
+    let message = error.message
+    try {
+      const response = (error as { context?: Response }).context
+      if (response) {
+        const body = await response.json() as { error?: string }
+        if (body.error) message = body.error
+      }
+    } catch {
+      // Keep Supabase's original error when the function response is not JSON.
+    }
+    throw new Error(message)
+  }
+  return data as { user?: UserRow; deleted?: number; failed?: Array<{ id: string; error: string }> }
 }
 
 export async function createManagedUser(user: UserInput): Promise<UserRow> {
@@ -147,7 +162,39 @@ export async function deleteManagedUser(id: string) {
 
 export async function deleteAllStudents(confirmation: string): Promise<number> {
   const result = await invokeAuthAdmin('delete_all_students', { confirmation })
+  if (result.failed?.length) throw new Error(`${result.deleted ?? 0} deleted; ${result.failed.length} student account(s) could not be deleted.`)
   return result.deleted ?? 0
+}
+
+export async function deleteAllMentors(confirmation: string): Promise<number> {
+  const result = await invokeAuthAdmin('delete_all_mentors', { confirmation })
+  if (result.failed?.length) throw new Error(`${result.deleted ?? 0} deleted; ${result.failed.length} mentor account(s) could not be deleted.`)
+  return result.deleted ?? 0
+}
+
+export async function deleteManagedUsers(
+  users: UserRow[],
+  confirmation: string,
+  onProgress: (progress: { current: number; total: number; deleted: number; failed: number }) => void,
+): Promise<{ deleted: number; failed: number }> {
+  const expectedConfirmation = users.some((user) => user.role === 'student')
+    ? 'I-hereby-ending-this-session'
+    : 'I-hereby-ending-all-mentor-accounts'
+  if (confirmation !== expectedConfirmation) throw new Error('The exact confirmation phrase is required.')
+
+  let deleted = 0
+  let failed = 0
+  for (const user of users) {
+    try {
+      await deleteManagedUser(user.id)
+      deleted += 1
+    } catch {
+      failed += 1
+    } finally {
+      onProgress({ current: deleted + failed, total: users.length, deleted, failed })
+    }
+  }
+  return { deleted, failed }
 }
 
 export async function listAllTasks() {

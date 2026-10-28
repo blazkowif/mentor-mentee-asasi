@@ -406,7 +406,9 @@ This keeps the Auth Admin API out of browser code. The destructive
 
 The spreadsheet importer maps source columns into the managed-user input
 shape. Since the source format does not require an email column, the import
-workflow generates a synthetic login email from `Nomatrik`.
+workflow uses `Nomatrik` as the student login ID. Supabase Auth receives a
+private synthetic email internally because its password API requires one; that
+implementation value is not the student's login ID.
 
 ## 11. Setup and deployment
 
@@ -542,4 +544,3 @@ Before a production release:
 - regenerate database types from the live schema;
 - run typecheck, lint, and production build; and
 - configure database backups and an incident/rollback process.
-

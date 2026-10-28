@@ -1,14 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/features/auth/authStore'
 import { uploadFile, getPublicUrl } from '@/services/storageService'
 import * as userService from '@/services/userService'
 import { queryKeys } from '@/lib/queryKeys'
+import LoadingButton from '@/components/LoadingButton'
 
 export default function ProfileSidebar() {
   const user = useAuthStore((s) => s.user)
   const setId = useAuthStore((s) => s.setUser)
   const location = useLocation()
+  const [isUploading, setIsUploading] = useState(false)
   const isHidden = location.pathname.startsWith('/admin/assignment')
 
   const { data: mentor } = useQuery({
@@ -22,17 +25,23 @@ export default function ProfileSidebar() {
   async function handleAvatar(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !user) return
-    const path = `${user.id}/${file.name}`
-    await uploadFile('profile', path, file)
-    const url = getPublicUrl('profile', path)
-    await userService.updateProfile(user.id, { profile_image: url })
-    const updated = await userService.getProfile(user.id)
-    setId(updated)
+    setIsUploading(true)
+    try {
+      const path = `${user.id}/${file.name}`
+      await uploadFile('profile', path, file)
+      const url = getPublicUrl('profile', path)
+      await userService.updateProfile(user.id, { profile_image: url })
+      const updated = await userService.getProfile(user.id)
+      setId(updated)
+    } finally {
+      setIsUploading(false)
+      e.target.value = ''
+    }
   }
 
   return (
-    <aside className="hidden w-72 shrink-0 lg:block">
-      <div className="sticky top-6 space-y-4">
+    <aside className="hidden h-[calc(100vh-57px)] w-72 shrink-0 overflow-y-auto lg:block">
+      <div className="space-y-4 p-1">
         <div className="rounded-lg bg-white p-4 shadow-sm">
           <div className="flex flex-col items-center">
             <div className="h-24 w-24 overflow-hidden rounded-full bg-ums-gray">
@@ -44,10 +53,10 @@ export default function ProfileSidebar() {
                 </span>
               )}
             </div>
-            <label className="mt-2 cursor-pointer text-xs text-ums-blue hover:underline">
+            <LoadingButton type="button" loading={isUploading} loadingLabel="Uploading…" className="mt-2 text-xs text-ums-blue hover:underline" onClick={() => document.getElementById('sidebar-avatar-upload')?.click()}>
               {user.profile_image ? 'Change photo' : 'Upload photo'}
-              <input type="file" accept="image/jpeg,image/png" className="hidden" onChange={handleAvatar} />
-            </label>
+            </LoadingButton>
+            <input id="sidebar-avatar-upload" type="file" accept="image/jpeg,image/png" className="hidden" onChange={handleAvatar} disabled={isUploading} />
           </div>
 
           <div className="mt-4 space-y-2">
@@ -55,14 +64,17 @@ export default function ProfileSidebar() {
               <p className="text-xs text-gray-400">Name</p>
               <p className="text-sm font-medium text-gray-900">{user.name}</p>
             </div>
-            <div>
-              <p className="text-xs text-gray-400">Email</p>
-              <p className="text-sm text-gray-900">{user.email || '—'}</p>
-            </div>
-            {user.matric_number && (
+            {user.role === 'student' ? (
+              user.matric_number && (
+                <div>
+                  <p className="text-xs text-gray-400">Matric Number</p>
+                  <p className="text-sm text-gray-900">{user.matric_number}</p>
+                </div>
+              )
+            ) : (
               <div>
-                <p className="text-xs text-gray-400">Matric Number</p>
-                <p className="text-sm text-gray-900">{user.matric_number}</p>
+                <p className="text-xs text-gray-400">Email</p>
+                <p className="text-sm text-gray-900">{user.email || '—'}</p>
               </div>
             )}
             {user.programme && (
@@ -90,6 +102,7 @@ export default function ProfileSidebar() {
 
         <div className="rounded-lg bg-white p-2 shadow-sm">
           <nav className="space-y-1">
+            <p className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Main menu</p>
             <NavItem to="/dashboard" label="Dashboard" />
             <NavItem to="/chat" label="Chat" />
             <NavItem to="/tasks" label="Tasks" />
@@ -98,8 +111,10 @@ export default function ProfileSidebar() {
             <NavItem to="/profile" label="Profile" />
             {user.role === 'admin' && (
               <>
-                <NavItem to="/admin/dashboard" label="Admin Dashboard" />
-                <NavItem to="/admin/control" label="Admin Control" />
+                <div className="my-2 border-t border-gray-100" />
+                <p className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Administration</p>
+                <NavItem to="/admin/dashboard" label="Admin dashboard" />
+                <NavItem to="/admin/control" label="Admin control" />
               </>
             )}
           </nav>

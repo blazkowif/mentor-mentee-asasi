@@ -15,12 +15,15 @@ export async function listAnnouncementsByLecturer(lecturerId: string): Promise<A
 }
 
 // Student view — announcements from their mentor.
-export async function listAnnouncementsByMentor(mentorId: string): Promise<Announcement[]> {
-  const { data, error } = await supabase
+export async function listAnnouncementsByMentor(mentorId: string | null): Promise<Announcement[]> {
+  let query = supabase
     .from('announcements')
     .select('*')
-    .or(`lecturer_id.eq.${mentorId},is_global.eq.true`)
     .order('created_at', { ascending: false })
+  query = mentorId
+    ? query.or(`lecturer_id.eq.${mentorId},is_global.eq.true`)
+    : query.eq('is_global', true)
+  const { data, error } = await query
   if (error) throw error
   return data
 }

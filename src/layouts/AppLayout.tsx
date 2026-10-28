@@ -21,11 +21,6 @@ export default function AppLayout() {
         <span className="font-semibold">PPST Mentor-Mentee System</span>
         <div className="flex items-center gap-3 text-sm">
           <span className="hidden opacity-90 sm:inline">{user?.name} · {role}</span>
-          {role === 'admin' && (
-            <a href="/admin/control" className="rounded border border-white/40 px-3 py-1.5 text-xs font-medium hover:bg-white/10">
-              Admin control
-            </a>
-          )}
           <button
             type="button"
             onClick={handleLogout}

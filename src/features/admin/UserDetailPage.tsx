@@ -109,8 +109,8 @@ export default function UserDetailPage() {
                 <dd className="text-gray-900">{user.name}</dd>
               </div>
               <div>
-                <dt className="text-gray-400">Email</dt>
-                <dd className="text-gray-900">{user.email ?? '—'}</dd>
+                <dt className="text-gray-400">{user.role === 'student' ? 'Login ID' : 'Email'}</dt>
+                <dd className="text-gray-900">{user.role === 'student' ? (user.matric_number ?? '—') : (user.email ?? '—')}</dd>
               </div>
               <div>
                 <dt className="text-gray-400">Matric / Staff</dt>

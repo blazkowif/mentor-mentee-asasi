@@ -1,5 +1,10 @@
 import { supabase } from '@/lib/supabase'
 
+export function studentAuthEmail(matricNumber: string) {
+  const normalized = matricNumber.trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
+  return `${normalized}@student.local`
+}
+
 /**
  * Login by Matric Number + IC Number (PRD section 6 — no public registration,
  * accounts are pre-imported by administrators).
@@ -17,10 +22,10 @@ import { supabase } from '@/lib/supabase'
  * than querying the `users` table directly with the anon key, so unauthenticated
  * users can't enumerate matric numbers / emails.
  */
-export async function loginWithMatric(matricNumber: string, icNumber: string) {
+export async function loginWithMatric(matricNumber: string, password: string) {
   const { data: emailLookup, error: lookupError } = await supabase.rpc(
     'get_login_email',
-    { p_matric_number: matricNumber },
+    { p_matric_number: matricNumber.trim() },
   )
 
   if (lookupError || !emailLookup) {
@@ -29,7 +34,7 @@ export async function loginWithMatric(matricNumber: string, icNumber: string) {
 
   const { data, error } = await supabase.auth.signInWithPassword({
     email: emailLookup as string,
-    password: icNumber,
+    password,
   })
 
   if (error) throw error
