@@ -56,6 +56,14 @@ export function useStudentSearch(query: string, enabled: boolean) {
   })
 }
 
+export function usePinnedChatContacts(userId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['chat', 'pinned-contacts', userId ?? ''],
+    queryFn: userService.listPinnedChatContacts,
+    enabled: enabled && !!userId,
+  })
+}
+
 export function usePersonalMessages(userA: string | undefined, userB: string | undefined) {
   const queryClient = useQueryClient()
   const queryKey = queryKeys.chat.personal(userA ?? '', userB ?? '')

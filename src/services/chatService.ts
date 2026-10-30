@@ -70,6 +70,12 @@ export async function deleteMessage(messageId: string) {
   if (error) throw error
 }
 
+export async function clearAllChatHistory() {
+  const { data, error } = await supabase.rpc('clear_all_chat_history')
+  if (error) throw error
+  return data ?? 0
+}
+
 /**
  * Subscribe to new messages matching one mentor-mentee pair.
  */

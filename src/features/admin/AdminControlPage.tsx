@@ -70,8 +70,8 @@ export default function AdminControlPage() {
   const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
   const initialTab = searchParams.get('tab')
-  const [tab, setTab] = useState<'users' | 'assignment' | 'import' | 'content'>(
-    initialTab === 'assignment' || initialTab === 'import' || initialTab === 'content' ? initialTab : 'users',
+  const [tab, setTab] = useState<'users' | 'assignment' | 'import' | 'content' | 'lists'>(
+    initialTab === 'assignment' || initialTab === 'import' || initialTab === 'content' || initialTab === 'lists' ? initialTab : 'users',
   )
   const [form, setForm] = useState<UserForm>(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -98,6 +98,11 @@ export default function AdminControlPage() {
   const users = usersQuery.data ?? []
   const studentCount = users.filter((user) => user.role === 'student').length
   const mentorCount = users.filter((user) => user.role === 'lecturer').length
+  const adminCount = users.filter((user) => user.role === 'admin').length
+  const unassignedStudentCount = users.filter((user) => user.role === 'student' && !user.mentor_id).length
+  const students = users.filter((user) => user.role === 'student')
+  const mentors = users.filter((user) => user.role === 'lecturer')
+  const mentees = students.filter((student) => student.mentor_id)
   const filteredUsers = useMemo(() => {
     const term = search.trim().toLowerCase()
     if (!term) return users
@@ -230,7 +235,7 @@ export default function AdminControlPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-semibold text-gray-900">Admin control center</h1>
+        <h1 className="text-lg font-semibold text-gray-900">Admin Dashboard</h1>
         <p className="text-sm text-gray-500">Manage accounts, assignments, tasks, and announcements from one place.</p>
       </div>
       <nav className="flex flex-wrap gap-2 border-b border-gray-200">
@@ -239,6 +244,7 @@ export default function AdminControlPage() {
           ['assignment', 'Reassign mentors'],
           ['import', 'Excel import'],
           ['content', 'Tasks & announcements'],
+          ['lists', 'Mentor & Mentee List'],
         ] as const).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)} className={`px-3 py-2 text-sm font-medium ${tab === key ? 'border-b-2 border-ums-blue text-ums-blue' : 'text-gray-600'}`}>
             {label}
@@ -253,7 +259,14 @@ export default function AdminControlPage() {
           Check that the logged-in profile exists in public.users and has role admin.
         </p>
       )}
-
+      {!usersQuery.isError && (
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatisticCard label="Students" value={studentCount} />
+          <StatisticCard label="Lecturers" value={mentorCount} />
+          <StatisticCard label="Administrators" value={adminCount} />
+          <StatisticCard label="Unassigned students" value={unassignedStudentCount} warning={unassignedStudentCount > 0} />
+        </section>
+      )}
       {tab === 'users' && (
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="rounded-lg bg-white p-4 shadow-sm">
@@ -421,8 +434,151 @@ export default function AdminControlPage() {
 
       {tab === 'import' && <SpreadsheetImport onComplete={() => queryClient.invalidateQueries({ queryKey: queryKeys.users.all() })} onMessage={setMessage} onError={setError} />}
       {tab === 'assignment' && <AssignmentPage />}
+      {tab === 'lists' && !usersQuery.isError && <ExportSection mentees={mentees} mentors={mentors} />}
       {tab === 'content' && <ContentManager users={users} tasks={tasksQuery.data ?? []} announcements={announcementsQuery.data ?? []} adminId={currentUser?.id ?? ''} onMessage={setMessage} onError={setError} />}
     </div>
+  )
+}
+
+function StatisticCard({ label, value, warning = false }: { label: string; value: number; warning?: boolean }) {
+  return (
+    <div className="rounded-lg bg-white p-5 shadow-sm">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className={`mt-2 text-3xl font-semibold ${warning ? 'text-red-700' : 'text-gray-900'}`}>{value}</p>
+    </div>
+  )
+}
+
+function ExportSection({
+  mentees,
+  mentors,
+}: {
+  mentees: adminService.UserRow[]
+  mentors: adminService.UserRow[]
+}) {
+  const [view, setView] = useState<'mentees' | 'mentors' | 'groups'>('mentees')
+
+  const downloadRows = (rows: Record<string, unknown>[], filename: string, sheetName: string) => {
+    const workbook = XLSX.utils.book_new()
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName)
+    XLSX.writeFile(workbook, filename)
+  }
+
+  const menteeRows = mentees
+    .slice()
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((mentee) => ({
+      Name: mentee.name,
+      'Matric Number': mentee.matric_number ?? '',
+      Programme: mentee.programme ?? '',
+      'Mentor ID': mentee.mentor_id ?? '',
+      Email: mentee.email ?? '',
+    }))
+
+  const groupedRows = mentors
+    .slice()
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .flatMap((mentor) => {
+      const mentorMentees = mentees
+        .filter((mentee) => mentee.mentor_id === mentor.id)
+        .sort((left, right) => left.name.localeCompare(right.name))
+
+      return mentorMentees.length
+        ? mentorMentees.map((mentee) => ({
+            Mentor: mentor.name,
+            'Mentor Email': mentor.email ?? '',
+            Mentee: mentee.name,
+            'Mentee Matric Number': mentee.matric_number ?? '',
+            Programme: mentee.programme ?? '',
+          }))
+        : [{
+            Mentor: mentor.name,
+            'Mentor Email': mentor.email ?? '',
+            Mentee: 'No mentees assigned',
+            'Mentee Matric Number': '',
+            Programme: '',
+          }]
+    })
+
+  const viewConfig = {
+    mentees: {
+      label: 'Mentees',
+      rows: menteeRows,
+      filename: 'mentees.xlsx',
+      sheetName: 'Mentees',
+    },
+    mentors: {
+      label: 'Mentors',
+      rows: mentors
+        .slice()
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map((mentor) => ({
+          Name: mentor.name,
+          Email: mentor.email ?? '',
+          'Staff ID': mentor.matric_number ?? '',
+          'Mentee Count': mentees.filter((mentee) => mentee.mentor_id === mentor.id).length,
+        })),
+      filename: 'mentors.xlsx',
+      sheetName: 'Mentors',
+    },
+    groups: {
+      label: 'Mentor & Mentee',
+      rows: groupedRows,
+      filename: 'mentors-and-mentees.xlsx',
+      sheetName: 'Mentor Groups',
+    },
+  }[view]
+
+  return (
+    <section className="rounded-lg bg-white p-4 shadow-sm">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+        <h2 className="font-semibold text-gray-900">Download lists</h2>
+        <p className="text-sm text-gray-500">Choose a list to view, then download the current list.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => downloadRows(viewConfig.rows, viewConfig.filename, viewConfig.sheetName)}
+          className="rounded bg-ums-blue px-3 py-2 text-sm font-medium text-white hover:bg-ums-blue-light"
+        >
+          Download {viewConfig.label}
+        </button>
+      </div>
+      <div className="mb-4 flex flex-wrap gap-2 border-b border-gray-100 pb-3">
+        {([
+          ['mentees', `Mentees (${mentees.length})`],
+          ['mentors', `Mentors (${mentors.length})`],
+          ['groups', 'Mentor & Mentee'],
+        ] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setView(key)}
+            className={`rounded px-3 py-2 text-sm font-medium ${view === key ? 'bg-ums-blue text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b text-xs text-gray-500">
+              {Object.keys(viewConfig.rows[0] ?? {}).map((heading) => <th key={heading} className="p-2">{heading}</th>)}
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {viewConfig.rows.map((row, index) => (
+              <tr key={`${view}-${index}`}>
+                {Object.values(row).map((value, valueIndex) => <td key={valueIndex} className="p-2">{String(value)}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {viewConfig.rows.length === 0 && <p className="py-4 text-sm text-gray-500">No records found.</p>}
+      </div>
+    </section>
   )
 }
 

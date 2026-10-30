@@ -259,6 +259,10 @@ export interface Database {
           profile_image: string | null
         }>
       }
+      clear_all_chat_history: {
+       Args: Record<string, never>
+       Returns: number
+      }
       list_chat_groups: {
         Args: Record<string, never>
         Returns: Array<{
@@ -267,6 +271,18 @@ export interface Database {
           group_name: string
           created_at: string
           is_current: boolean
+        }>
+      }
+      list_pinned_chat_contacts: {
+        Args: Record<string, never>
+        Returns: Array<{
+          id: string
+          role: UserRole
+          matric_number: string | null
+          name: string
+          programme: string | null
+          profile_image: string | null
+          contact_type: string
         }>
       }
     }

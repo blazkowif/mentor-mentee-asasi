@@ -222,16 +222,9 @@ export async function createGlobalAnnouncement(adminId: string, title: string, c
   return data
 }
 
-export async function autoAssignMentors(options?: { programme?: string }) {
-  let query = supabase
-    .from('users')
-    .select('id')
-    .eq('role', 'student')
-    .is('mentor_id', null)
-  if (options?.programme) query = query.eq('programme', options.programme)
-  const { data: orphanStudents, error: selErr } = await query
-  if (selErr) throw selErr
-  if (!orphanStudents?.length) return { assigned: 0 }
+export async function autoAssignMentors(studentIds: string[]) {
+  if (!studentIds.length) return { assigned: 0 }
+
   const {
     data: lecturerIds,
     error: lErr,
@@ -242,13 +235,22 @@ export async function autoAssignMentors(options?: { programme?: string }) {
   if (lErr) throw lErr
   if (!lecturerIds?.length) return { assigned: 0 }
   const ids = lecturerIds.map((r) => r.id)
-  const updated = orphanStudents.map((s) => ({
-    id: s.id,
-    mentor_id: ids[Math.floor(Math.random() * ids.length)],
+  const assignments = ids.map((mentorId) => ({
+    mentorId,
+    studentIds: studentIds.filter((_, index) => ids[index % ids.length] === mentorId),
   }))
-  const { error: upErr } = await supabase
-    .from('users')
-    .upsert(updated as any[], { count: 'exact' })
-  if (upErr) throw upErr
-  return { assigned: updated.length }
+
+  await Promise.all(
+    assignments
+      .filter(({ studentIds: assignedStudentIds }) => assignedStudentIds.length > 0)
+      .map(async ({ mentorId, studentIds: assignedStudentIds }) => {
+        const { error } = await supabase
+          .from('users')
+          .update({ mentor_id: mentorId })
+          .in('id', assignedStudentIds)
+        if (error) throw error
+      }),
+  )
+
+  return { assigned: studentIds.length }
 }

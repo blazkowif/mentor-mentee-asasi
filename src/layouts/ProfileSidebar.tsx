@@ -103,20 +103,12 @@ export default function ProfileSidebar() {
         <div className="rounded-lg bg-white p-2 shadow-sm">
           <nav className="space-y-1">
             <p className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Main menu</p>
-            <NavItem to="/dashboard" label="Dashboard" />
+            <NavItem to={user.role === 'admin' ? '/admin/control' : '/dashboard'} label={user.role === 'admin' ? 'Admin Dashboard' : 'Dashboard'} />
             <NavItem to="/chat" label="Chat" />
             <NavItem to="/tasks" label="Tasks" />
             <NavItem to="/announcements" label="Announcements" />
             <NavItem to="/notifications" label="Notifications" />
             <NavItem to="/profile" label="Profile" />
-            {user.role === 'admin' && (
-              <>
-                <div className="my-2 border-t border-gray-100" />
-                <p className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Administration</p>
-                <NavItem to="/admin/dashboard" label="Admin dashboard" />
-                <NavItem to="/admin/control" label="Admin control" />
-              </>
-            )}
           </nav>
         </div>
       </div>

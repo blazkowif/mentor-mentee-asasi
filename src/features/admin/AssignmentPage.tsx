@@ -51,10 +51,9 @@ export default function AssignmentPage() {
   })
   const autoAssign = useMutation({
     mutationFn: () =>
-    adminService.autoAssignMentors(
-      programme === 'all' ? undefined : { programme },
-    ),
+    adminService.autoAssignMentors(Array.from(selectedIds)),
     onSuccess: () => {
+    setSelectedIds(new Set())
     setError(null)
     qc.invalidateQueries({ queryKey: queryKeys.users.all() })
     qc.invalidateQueries({ queryKey: queryKeys.admin.all })
@@ -126,11 +125,11 @@ export default function AssignmentPage() {
           {filtered.length} students · {unassignedCount} unassigned
         </div>
         <button
-          disabled={autoAssign.isPending}
+          disabled={autoAssign.isPending || selectedIds.size === 0}
           onClick={() => autoAssign.mutate()}
           className="rounded bg-ums-blue px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
         >
-          Auto-assign unassigned
+          {autoAssign.isPending ? 'Assigning…' : 'Auto-assign selected'}
         </button>
       </div>
 

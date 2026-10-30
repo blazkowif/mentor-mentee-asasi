@@ -9,11 +9,13 @@ import {
   useMentor,
   useMyGroups,
   useStudentSearch,
+  usePinnedChatContacts,
   usePersonalMessages,
   useGroupMessages,
   useSendMessage,
   useDeleteMessage,
 } from './hooks/useChat'
+import * as chatService from '@/services/chatService'
 import ConversationList, { type ChatThread } from './components/ConversationList'
 import MessageBubble from './components/MessageBubble'
 import MessageInput from './components/MessageInput'
@@ -27,6 +29,7 @@ export default function ChatPage() {
   const [searchParams] = useSearchParams()
   const [studentSearch, setStudentSearch] = useState('')
   const [pendingMessages, setPendingMessages] = useState<Message[]>([])
+  const [sendError, setSendError] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
   const isLecturer = role === 'lecturer'
@@ -35,11 +38,21 @@ export default function ChatPage() {
   const { data: mentor } = useMentor(!isLecturer ? user?.mentor_id : undefined)
   const { data: groups = [] } = useMyGroups(user?.id)
   const { data: studentResults = [] } = useStudentSearch(studentSearch, role === 'student' || isAdmin)
+  const pinnedContactsQuery = usePinnedChatContacts(user?.id, !isAdmin)
+  const { data: pinnedContacts = [] } = pinnedContactsQuery
   const sendMessage = useSendMessage()
   const deleteMessage = useDeleteMessage()
+  const [clearingHistory, setClearingHistory] = useState(false)
 
   const threads: ChatThread[] = useMemo(() => {
     const list: ChatThread[] = []
+    pinnedContacts.forEach((contact) =>
+      list.push({
+        key: `personal:${contact.id}`,
+        label: contact.name,
+        subtitle: contact.contact_type === 'mentor' ? 'Your mentor' : 'Administrator',
+      }),
+    )
     const currentGroups = groups.filter((chatGroup) => chatGroup.is_current)
     const previousGroups = groups.filter((chatGroup) => !chatGroup.is_current)
     currentGroups.forEach((chatGroup) =>
@@ -49,7 +62,7 @@ export default function ChatPage() {
         subtitle: chatGroup.is_current ? 'Current mentor group' : 'Previous mentor group',
       }),
     )
-    if (!isLecturer && mentor) {
+    if (!isLecturer && mentor && !pinnedContacts.some((contact) => contact.id === mentor.id)) {
       list.push({ key: `personal:${mentor.id}`, label: mentor.name, subtitle: 'Your mentor' })
     }
     previousGroups.forEach((chatGroup) =>
@@ -68,7 +81,7 @@ export default function ChatPage() {
       )
     }
     return list
-  }, [groups, isAdmin, isLecturer, mentees, mentor, role, studentResults])
+  }, [groups, isAdmin, isLecturer, mentees, mentor, pinnedContacts, role, studentResults])
 
   useEffect(() => {
     const requestedUserId = searchParams.get('user')
@@ -100,6 +113,7 @@ export default function ChatPage() {
 
   function handleSend(text: string) {
     if (!user || !effectiveActiveKey) return
+    setSendError(null)
     const temporaryId = `pending-${crypto.randomUUID()}`
     const pendingMessage: Message = {
       id: temporaryId,
@@ -127,7 +141,10 @@ export default function ChatPage() {
               message,
             ])
           },
-          onError: clearPending,
+          onError: (error) => {
+            clearPending()
+            setSendError(error instanceof Error ? error.message : 'Unable to send this message.')
+          },
         },
       )
     } else if (otherUserId) {
@@ -141,7 +158,10 @@ export default function ChatPage() {
               message,
             ])
           },
-          onError: clearPending,
+          onError: (error) => {
+            clearPending()
+            setSendError(error instanceof Error ? error.message : 'Unable to send this message.')
+          },
         },
       )
     }
@@ -153,11 +173,35 @@ export default function ChatPage() {
     }
   }
 
+  async function handleClearHistory() {
+    if (!window.confirm('Delete every personal and group chat message for all users? This cannot be undone.')) return
+    setClearingHistory(true)
+    try {
+      await chatService.clearAllChatHistory()
+      setPendingMessages([])
+      await queryClient.invalidateQueries({ queryKey: ['chat'] })
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Unable to clear chat history.')
+    } finally {
+      setClearingHistory(false)
+    }
+  }
+
   return (
     <div className="flex h-[calc(100vh-8rem)] overflow-hidden rounded-xl border border-[#2b2d42] bg-[#11131f] shadow-xl">
       <aside className="flex w-64 shrink-0 flex-col border-r border-[#2b2d42] bg-[#191b2b]">
         <div className="border-b border-[#2b2d42] p-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-[#aeb4d4]">Messages</p>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleClearHistory}
+              disabled={clearingHistory}
+              className="mt-3 w-full rounded border border-red-400/60 px-3 py-2 text-xs font-medium text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+            >
+              {clearingHistory ? 'Clearing history…' : 'Clear all chat history'}
+            </button>
+          )}
           {(role === 'student' || isAdmin) && (
             <input
               value={studentSearch}
@@ -165,6 +209,11 @@ export default function ChatPage() {
               placeholder="Find a student..."
               className="mt-3 w-full rounded-lg border border-[#4b5375] bg-[#171b2b] px-3 py-2 text-xs text-white outline-none placeholder:text-[#9ca5c5] focus:border-[#8994ed]"
             />
+          )}
+          {pinnedContactsQuery.isError && (
+            <p className="mt-2 text-xs text-red-200">
+              Admin contact unavailable. Apply the latest Supabase migration.
+            </p>
           )}
         </div>
         <ConversationList threads={threads} activeKey={effectiveActiveKey} onSelect={setActiveKey} />
@@ -191,6 +240,11 @@ export default function ChatPage() {
                 <p className="text-center text-sm text-[#aeb6d2]">No messages yet. Say hello.</p>
               )}
             </div>
+            {sendError && (
+              <p className="border-t border-red-400/40 bg-red-950/40 px-5 py-2 text-xs text-red-200">
+                Message was not sent: {sendError}
+              </p>
+            )}
             <MessageInput onSend={handleSend} disabled={sendMessage.isPending} />
           </>
         ) : (
