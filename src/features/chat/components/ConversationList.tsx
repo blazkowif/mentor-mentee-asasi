@@ -4,6 +4,7 @@ export interface ChatThread {
   key: string
   label: string
   subtitle?: string
+  unreadCount?: number
 }
 
 export default function ConversationList({
@@ -33,6 +34,11 @@ export default function ConversationList({
           {thread.subtitle && (
             <span className="block text-xs text-[#aeb6d2]">{thread.subtitle}</span>
           )}
+          {thread.unreadCount ? (
+            <span className="mt-1 inline-flex min-w-5 rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+              {thread.unreadCount > 9 ? '9+' : thread.unreadCount}
+            </span>
+          ) : null}
         </button>
       ))}
       {threads.length === 0 && (

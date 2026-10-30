@@ -10,6 +10,8 @@ import {
   useMyGroups,
   useStudentSearch,
   usePinnedChatContacts,
+  useChatContacts,
+  useMarkChatRead,
   usePersonalMessages,
   useGroupMessages,
   useSendMessage,
@@ -40,6 +42,8 @@ export default function ChatPage() {
   const { data: studentResults = [] } = useStudentSearch(studentSearch, role === 'student' || isAdmin)
   const pinnedContactsQuery = usePinnedChatContacts(user?.id, !isAdmin)
   const { data: pinnedContacts = [] } = pinnedContactsQuery
+  const { data: chatContacts = [] } = useChatContacts(user?.id)
+  const markChatRead = useMarkChatRead()
   const sendMessage = useSendMessage()
   const deleteMessage = useDeleteMessage()
   const [clearingHistory, setClearingHistory] = useState(false)
@@ -51,8 +55,22 @@ export default function ChatPage() {
         key: `personal:${contact.id}`,
         label: contact.name,
         subtitle: contact.contact_type === 'mentor' ? 'Your mentor' : 'Administrator',
+        unreadCount: chatContacts.find((chatContact) => chatContact.id === contact.id)?.unread_count ?? 0,
       }),
     )
+    chatContacts.forEach((contact) => {
+      if (list.some((thread) => thread.key === `personal:${contact.id}`)) return
+      list.push({
+        key: `personal:${contact.id}`,
+        label: contact.name,
+        subtitle: contact.role === 'admin'
+          ? 'Administrator'
+          : contact.role === 'lecturer'
+          ? 'Mentor'
+          : contact.matric_number ?? 'Student',
+        unreadCount: contact.unread_count,
+      })
+    })
     const currentGroups = groups.filter((chatGroup) => chatGroup.is_current)
     const previousGroups = groups.filter((chatGroup) => !chatGroup.is_current)
     currentGroups.forEach((chatGroup) =>
@@ -81,7 +99,14 @@ export default function ChatPage() {
       )
     }
     return list
-  }, [groups, isAdmin, isLecturer, mentees, mentor, pinnedContacts, role, studentResults])
+  }, [chatContacts, groups, isAdmin, isLecturer, mentees, mentor, pinnedContacts, role, studentResults])
+
+  function selectThread(key: string) {
+    setActiveKey(key)
+    if (key.startsWith('personal:')) {
+      markChatRead.mutate(key.slice('personal:'.length))
+    }
+  }
 
   useEffect(() => {
     const requestedUserId = searchParams.get('user')
@@ -216,7 +241,7 @@ export default function ChatPage() {
             </p>
           )}
         </div>
-        <ConversationList threads={threads} activeKey={effectiveActiveKey} onSelect={setActiveKey} />
+        <ConversationList threads={threads} activeKey={effectiveActiveKey} onSelect={selectThread} />
       </aside>
 
       <div className="flex flex-1 flex-col bg-[#171b2b]">

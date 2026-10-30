@@ -7,6 +7,7 @@ export function useNotifications(userId: string | undefined) {
     queryKey: queryKeys.notifications.byUser(userId ?? ''),
     queryFn: () => notificationService.listNotifications(userId!),
     enabled: !!userId,
+    refetchInterval: 15000,
   })
 }
 

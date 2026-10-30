@@ -28,6 +28,7 @@ export default function AuthPage() {
   const [role, setRole] = useState<Role>(location.pathname === '/staff-login' ? 'staff' : 'student')
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -83,9 +84,9 @@ export default function AuthPage() {
     setIsSubmitting(true)
     try {
       if (role === 'student') {
-        await loginWithMatric(identifier, password)
+        await loginWithMatric(identifier, password, rememberMe)
       } else {
-        await loginWithEmail(identifier, password)
+        await loginWithEmail(identifier, password, rememberMe)
       }
       navigate('/dashboard')
     } catch (err) {
@@ -157,6 +158,13 @@ export default function AuthPage() {
               <button type="button" className="auth-password-toggle" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Hide password' : 'Show password'}>
                 {showPassword ? 'Hide' : 'Show'}
               </button>
+            </div>
+            <div className="auth-options">
+              <label className="auth-remember" htmlFor="auth-remember">
+                <input id="auth-remember" type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+                <span className="auth-remember__box" aria-hidden="true" />
+                <span className="auth-remember__text">Remember me on this trusted device</span>
+              </label>
             </div>
             {error && <p className="auth-form__error" role="alert">{error}</p>}
             <button type="submit" className="auth-submit" disabled={isSubmitting}>

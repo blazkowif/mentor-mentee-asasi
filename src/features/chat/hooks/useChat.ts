@@ -64,6 +64,25 @@ export function usePinnedChatContacts(userId: string | undefined, enabled: boole
   })
 }
 
+export function useChatContacts(userId: string | undefined) {
+  return useQuery({
+    queryKey: ['chat', 'contacts', userId ?? ''],
+    queryFn: userService.listChatContacts,
+    enabled: !!userId,
+  })
+}
+
+export function useMarkChatRead() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: userService.markChatRead,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chat', 'contacts'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
+  })
+}
+
 export function usePersonalMessages(userA: string | undefined, userB: string | undefined) {
   const queryClient = useQueryClient()
   const queryKey = queryKeys.chat.personal(userA ?? '', userB ?? '')

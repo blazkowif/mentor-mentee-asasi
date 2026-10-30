@@ -7,6 +7,9 @@
 export type UserRole = 'student' | 'lecturer' | 'admin'
 export type TaskPriority = 'low' | 'medium' | 'high'
 export type SubmissionStatus = 'pending' | 'submitted' | 'reviewed' | 'completed'
+export type MentorNoteCategory = 'general' | 'academic' | 'attendance' | 'welfare' | 'behaviour' | 'financial' | 'follow_up' | 'other'
+export type AttentionSeverity = 'monitor' | 'needs_attention' | 'urgent'
+export type AttentionStatus = 'open' | 'acknowledged' | 'in_progress' | 'resolved' | 'dismissed'
 
 export interface Database {
   public: {
@@ -229,6 +232,66 @@ export interface Database {
           },
         ]
       }
+      mentor_notes: {
+        Row: {
+          id: string
+          student_id: string
+          mentor_id: string
+          category: MentorNoteCategory
+          note: string
+          created_at: string
+          updated_at: string
+          archived_at: string | null
+        }
+        Insert: Partial<Database['public']['Tables']['mentor_notes']['Row']> & {
+          student_id: string
+          mentor_id: string
+          note: string
+        }
+        Update: Partial<Database['public']['Tables']['mentor_notes']['Row']>
+        Relationships: []
+      }
+      student_attention_flags: {
+        Row: {
+          id: string
+          student_id: string
+          mentor_id: string
+          severity: AttentionSeverity
+          reason: string
+          status: AttentionStatus
+          created_at: string
+          updated_at: string
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          resolution_note: string | null
+        }
+        Insert: Partial<Database['public']['Tables']['student_attention_flags']['Row']> & {
+          student_id: string
+          mentor_id: string
+          severity: AttentionSeverity
+          reason: string
+        }
+        Update: Partial<Database['public']['Tables']['student_attention_flags']['Row']>
+        Relationships: []
+      }
+      admin_follow_up_notes: {
+        Row: {
+          id: string
+          attention_flag_id: string
+          admin_id: string
+          note: string
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['admin_follow_up_notes']['Row']> & {
+          attention_flag_id: string
+          admin_id: string
+          note: string
+        }
+        Update: Partial<Database['public']['Tables']['admin_follow_up_notes']['Row']>
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: {
@@ -285,11 +348,44 @@ export interface Database {
           contact_type: string
         }>
       }
+      list_chat_contacts: {
+        Args: Record<string, never>
+        Returns: Array<{
+          id: string
+          role: UserRole
+          matric_number: string | null
+          name: string
+          programme: string | null
+          profile_image: string | null
+          contact_type: string
+          last_message_at: string | null
+          unread_count: number
+        }>
+      }
+      mark_chat_read: {
+        Args: { p_contact_id: string }
+        Returns: undefined
+      }
+      clear_all_chat_history_v2: {
+        Args: Record<string, never>
+        Returns: number
+      }
+      send_personal_message: {
+        Args: {
+          p_receiver_id: string
+          p_message: string
+          p_attachment?: string | null
+        }
+        Returns: Database['public']['Tables']['messages']['Row']
+      }
     }
     Enums: {
       user_role: UserRole
       task_priority: TaskPriority
       submission_status: SubmissionStatus
+      mentor_note_category: MentorNoteCategory
+      attention_severity: AttentionSeverity
+      attention_status: AttentionStatus
     }
   }
 }

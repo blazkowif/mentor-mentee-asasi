@@ -50,6 +50,16 @@ export async function sendMessage(params: {
   message: string
   attachment?: string | null
 }): Promise<Message> {
+  if (params.receiverId && !params.groupId) {
+    const { data, error } = await supabase.rpc('send_personal_message', {
+      p_receiver_id: params.receiverId,
+      p_message: params.message,
+      p_attachment: params.attachment ?? null,
+    })
+    if (error) throw error
+    return data
+  }
+
   const { data, error } = await supabase
     .from('messages')
     .insert({
@@ -71,7 +81,7 @@ export async function deleteMessage(messageId: string) {
 }
 
 export async function clearAllChatHistory() {
-  const { data, error } = await supabase.rpc('clear_all_chat_history')
+  const { data, error } = await supabase.rpc('clear_all_chat_history_v2')
   if (error) throw error
   return data ?? 0
 }

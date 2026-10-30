@@ -23,6 +23,7 @@ shared workspace for:
 - lecturer announcements and administrator-wide announcements;
 - scoped personal and mentor-group chat;
 - notifications and read/unread state;
+- private mentor notes and administrator-only student-support attention flags;
 - profile viewing, profile editing, and profile images; and
 - administrative account, assignment, search, and bulk-import operations.
 
@@ -69,6 +70,8 @@ Lecturer capabilities include:
 - reviewing submissions, setting status, and writing feedback;
 - creating and deleting announcements;
 - attaching announcement resources;
+- recording private notes about assigned mentees and escalating attention
+  remarks to administrators without exposing those records to students;
 - using scoped personal and group chat;
 - viewing and updating allowed profile fields;
 - uploading a profile image; and
@@ -97,6 +100,16 @@ Administrator capabilities include:
 - creating and deleting mentor assignments;
 - communicating with staff and students through permitted chat paths; and
 - publishing global announcements.
+- reviewing private mentor notes and attention remarks from student details;
+- receiving notifications when a mentor creates an attention remark.
+
+### Private mentor notes and attention remarks
+
+Mentor notes are stored separately from chat, tasks, and student-visible
+meeting records. Only the note's mentor and administrators can read them.
+An attention remark includes a severity and reason, and creates an in-app
+notification for every administrator. Students have no database policy that
+allows them to read notes, flags, or administrator follow-up records.
 
 The administrator account must already exist before the account-management
 Edge Function can create other accounts.
@@ -160,6 +173,21 @@ The deployment configuration is in `vercel.json`.
    security boundary.
 10. Chat hooks add Supabase Realtime subscriptions and invalidate/update query
     state when messages change.
+
+### Session security policy
+
+The application signs users out after 20 minutes without activity and displays
+a warning during the final five minutes. It also enforces a two-hour absolute
+session limit in the client, even if the user remains active. Remember Me is
+opt-in and stores the Supabase session only on a trusted device; otherwise the
+session uses session storage and ends when the browser session ends.
+
+For deployment, configure Supabase Auth's server-side session controls in the
+project dashboard: a two-hour time-boxed session and a 20-minute inactivity
+timeout, where those controls are available for the selected plan. The
+frontend timer is only a responsive UX fallback; it is not a security
+boundary. PostgreSQL RLS must remain enabled, and sensitive operations must
+continue to be authorized by Supabase on every request.
 
 ## 6. Application routes
 

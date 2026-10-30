@@ -6,6 +6,7 @@ import { uploadFile, getPublicUrl } from '@/services/storageService'
 import * as userService from '@/services/userService'
 import { queryKeys } from '@/lib/queryKeys'
 import LoadingButton from '@/components/LoadingButton'
+import { useNotifications } from '@/features/notifications/hooks/useNotifications'
 
 export default function ProfileSidebar() {
   const user = useAuthStore((s) => s.user)
@@ -13,6 +14,10 @@ export default function ProfileSidebar() {
   const location = useLocation()
   const [isUploading, setIsUploading] = useState(false)
   const isHidden = location.pathname.startsWith('/admin/assignment')
+  const { data: notifications = [] } = useNotifications(user?.id)
+  const unreadChatCount = notifications.filter(
+    (notification) => !notification.is_read && notification.title === 'New chat message',
+  ).length
 
   const { data: mentor } = useQuery({
     queryKey: queryKeys.users.mentor(user?.id ?? ''),
@@ -104,8 +109,9 @@ export default function ProfileSidebar() {
           <nav className="space-y-1">
             <p className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Main menu</p>
             <NavItem to={user.role === 'admin' ? '/admin/control' : '/dashboard'} label={user.role === 'admin' ? 'Admin Dashboard' : 'Dashboard'} />
-            <NavItem to="/chat" label="Chat" />
+            <NavItem to="/chat" label="Chat" unreadCount={unreadChatCount} />
             <NavItem to="/tasks" label="Tasks" />
+            {user.role === 'lecturer' && <NavItem to="/mentor-notes" label="Private notes" />}
             <NavItem to="/announcements" label="Announcements" />
             <NavItem to="/notifications" label="Notifications" />
             <NavItem to="/profile" label="Profile" />
@@ -116,14 +122,21 @@ export default function ProfileSidebar() {
   )
 }
 
-function NavItem({ to, label }: { to: string; label: string }) {
+function NavItem({ to, label, unreadCount = 0 }: { to: string; label: string; unreadCount?: number }) {
   const active = useLocation().pathname === to || useLocation().pathname.startsWith(to + '/')
   return (
     <Link
       to={to}
       className={`block rounded px-3 py-2 text-sm ${active ? 'bg-ums-blue text-white' : 'text-gray-700 hover:bg-gray-50'}`}
     >
-      {label}
+      <span className="flex items-center justify-between gap-2">
+        <span>{label}</span>
+        {unreadCount > 0 && (
+          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+      </span>
     </Link>
   )
 }

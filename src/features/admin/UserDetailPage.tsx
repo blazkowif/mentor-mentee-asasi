@@ -3,11 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import * as adminService from '@/services/adminService'
+import * as mentorNotesService from '@/services/mentorNotesService'
 import { queryKeys } from '@/lib/queryKeys'
 
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const [activeTab, setActiveTab] = useState<'profile' | 'activity'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'activity' | 'support'>('profile')
 
   const userId = id === 'none' ? undefined : id
 
@@ -19,11 +20,22 @@ export default function UserDetailPage() {
   })
 
   const user = userId ? users.find((u) => u.id === userId) : undefined
+  const isStudent = user?.role === 'student'
 
   const { data: logs = [], isLoading: logsLoading } = useQuery({
     queryKey: queryKeys.admin.activity(userId ?? 'none'),
     queryFn: () => (userId ? adminService.getUserActivity(userId, 50) : Promise.resolve([])),
     enabled: !!userId && activeTab === 'activity',
+  })
+  const { data: privateNotes = [], isLoading: notesLoading } = useQuery({
+    queryKey: ['mentor-notes', userId ?? 'none'],
+    queryFn: () => (userId ? mentorNotesService.listMentorNotes(userId) : Promise.resolve([])),
+    enabled: !!userId && isStudent && activeTab === 'support',
+  })
+  const { data: attentionFlags = [], isLoading: flagsLoading } = useQuery({
+    queryKey: ['attention-flags', userId ?? 'none'],
+    queryFn: () => (userId ? mentorNotesService.listAttentionFlags(userId) : Promise.resolve([])),
+    enabled: !!userId && isStudent && activeTab === 'support',
   })
 
   const mentor = useMemo(
@@ -95,6 +107,14 @@ export default function UserDetailPage() {
         >
           Activity
         </button>
+        {isStudent && (
+          <button
+            onClick={() => setActiveTab('support')}
+            className={`px-3 py-1.5 text-sm font-medium ${activeTab === 'support' ? 'border-b-2 border-ums-blue text-ums-blue' : 'text-gray-600'}`}
+          >
+            Mentor support
+          </button>
+        )}
       </div>
 
       {activeTab === 'profile' && (
@@ -193,6 +213,49 @@ export default function UserDetailPage() {
               ))}
             </ul>
           )}
+        </div>
+      )}
+
+      {activeTab === 'support' && isStudent && (
+        <div className="space-y-4">
+              <section className="rounded-lg bg-white p-4 shadow-sm">
+                <h3 className="mb-2 text-sm font-semibold text-gray-500">Attention remarks</h3>
+                {flagsLoading ? <p className="text-sm text-gray-500">Loading…</p> : attentionFlags.length === 0 ? (
+                  <p className="text-sm text-gray-500">No attention remarks recorded.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {attentionFlags.map((flag) => (
+                      <li key={flag.id} className={`rounded border p-3 text-sm ${flag.status === 'open' || flag.status === 'in_progress' ? 'border-red-100 bg-red-50' : 'border-gray-100 bg-gray-50'}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium capitalize text-gray-900">{flag.severity.replace('_', ' ')}</span>
+                          <span className="text-xs capitalize text-gray-500">{flag.status.replace('_', ' ')}</span>
+                        </div>
+                        <p className="mt-1 text-gray-700">{flag.reason}</p>
+                        <p className="mt-1 text-xs text-gray-400">{format(new Date(flag.created_at), 'PPp')}</p>
+                        {flag.resolution_note && <p className="mt-2 text-xs text-gray-600">Resolution: {flag.resolution_note}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+              <section className="rounded-lg bg-white p-4 shadow-sm">
+                <h3 className="mb-2 text-sm font-semibold text-gray-500">Private mentor notes</h3>
+                {notesLoading ? <p className="text-sm text-gray-500">Loading…</p> : privateNotes.length === 0 ? (
+                  <p className="text-sm text-gray-500">No private notes recorded.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {privateNotes.map((entry) => (
+                      <li key={entry.id} className="rounded border border-gray-100 p-3 text-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="capitalize text-xs font-medium text-gray-500">{entry.category.replace('_', ' ')}</span>
+                          <span className="text-xs text-gray-400">{format(new Date(entry.created_at), 'PPp')}</span>
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-gray-700">{entry.note}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
         </div>
       )}
     </div>

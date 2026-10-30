@@ -12,6 +12,7 @@ import AssignmentPage from '@/features/admin/AssignmentPage'
 import AdminSearchPage from '@/features/admin/AdminSearchPage'
 import UserDetailPage from '@/features/admin/UserDetailPage'
 import AdminControlPage from '@/features/admin/AdminControlPage'
+import MentorNotesPage from '@/features/mentorNotes/MentorNotesPage'
 
 export default function AppRoutes() {
   return (
@@ -39,6 +40,12 @@ export default function AppRoutes() {
           <Route path="/admin/student/:id" element={<UserDetailPage />} />
           <Route path="/admin/lecturer/:id" element={<UserDetailPage />} />
           <Route path="/admin/control" element={<AdminControlPage />} />
+        </Route>
+
+        <Route element={<ProtectedRoute allowedRoles={['lecturer']} />}>
+          <Route element={<AppLayout />}>
+            <Route path="/mentor-notes" element={<MentorNotesPage />} />
+          </Route>
         </Route>
       </Route>
 

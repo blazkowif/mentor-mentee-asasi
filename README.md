@@ -42,6 +42,12 @@ npm run dev
   email/password native, so this maps a matric number to a synthetic email
   via a `get_login_email` RPC. Decide during account-import build-out
   whether IC-as-password is acceptable long-term or should force a reset.
+  Sessions use a 20-minute inactivity timeout with a five-minute warning,
+  an absolute two-hour browser session limit, and an opt-in Remember Me
+  setting for trusted devices. Configure Supabase Auth's server-side
+  time-boxed session and inactivity timeout in the project dashboard;
+  browser timers are UX controls, while database RLS remains the
+  authorization boundary.
 - **Student** — dashboard (mentor info, upcoming tasks, recent
   announcements, notification count), task list with file-upload
   submission, announcement feed, personal + group chat with realtime
@@ -49,7 +55,9 @@ npm run dev
 - **Lecturer** — dashboard (mentee count, task count, upcoming deadlines,
   mentee list), task create/list/delete with a submissions review panel
   (mark reviewed/completed + feedback), announcement create/list/delete,
-  same chat/notifications/profile as above.
+  same chat/notifications/profile as above, and private mentor notes with
+  optional admin attention remarks. Private notes are not visible to students;
+  attention remarks notify administrators.
 - **Admin** — dashboard with lecturer activity and assignment tools, plus
   `/admin/control` for user creation/deletion, password changes, full student
   profile/login editing, and `.xlsx`/`.xls`/CSV student and mentor import.
@@ -78,6 +86,9 @@ npm run dev
   tighten it once you decide whether inserts come from a trigger, an Edge
   Function, or client-side.
 - Real-time presence / "online now" indicators.
+- Admin review/export screens for private mentor notes and attention remarks
+  are planned as the next increment; the initial private-note workflow and
+  admin student-detail visibility are now wired.
 - Lecturer-specific profile fields (Staff ID, Faculty from PRD §17) — the
   shared `users` table (PRD §19) doesn't have columns for these yet.
 

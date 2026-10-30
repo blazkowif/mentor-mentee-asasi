@@ -42,6 +42,26 @@ export async function listPinnedChatContacts(): Promise<PinnedChatContact[]> {
   return (data ?? []) as PinnedChatContact[]
 }
 
+export type ChatContact = ChatDirectoryUser & {
+  contact_type: 'admin' | 'mentor' | 'conversation'
+  last_message_at: string | null
+  unread_count: number
+}
+
+export async function listChatContacts(): Promise<ChatContact[]> {
+  const { data, error } = await supabase.rpc('list_chat_contacts')
+  if (error) throw error
+  return (data ?? []).map((contact) => ({
+    ...contact,
+    contact_type: contact.contact_type as ChatContact['contact_type'],
+  }))
+}
+
+export async function markChatRead(contactId: string): Promise<void> {
+  const { error } = await supabase.rpc('mark_chat_read', { p_contact_id: contactId })
+  if (error) throw error
+}
+
 export async function updateProfile(userId: string, patch: ProfilePatch) {
   const { data, error } = await supabase
     .from('users')

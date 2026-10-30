@@ -3,6 +3,27 @@ import type { Database } from '@/types/database.types'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+const REMEMBER_ME_KEY = 'ppst-remember-me'
+
+const sessionStorageAdapter = {
+  getItem(key: string) {
+    return localStorage.getItem(key) ?? sessionStorage.getItem(key)
+  },
+  setItem(key: string, value: string) {
+    const remember = localStorage.getItem(REMEMBER_ME_KEY) === 'true'
+    if (remember) {
+      localStorage.setItem(key, value)
+      sessionStorage.removeItem(key)
+    } else {
+      sessionStorage.setItem(key, value)
+      localStorage.removeItem(key)
+    }
+  },
+  removeItem(key: string) {
+    localStorage.removeItem(key)
+    sessionStorage.removeItem(key)
+  },
+}
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
@@ -14,5 +35,6 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    storage: sessionStorageAdapter,
   },
 })

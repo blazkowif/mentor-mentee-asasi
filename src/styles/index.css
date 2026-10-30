@@ -176,7 +176,18 @@
   .auth-field { position: relative; }
   .auth-form input { width: 100%; border: 1px solid #dce3eb; border-radius: 9px; padding: clamp(.68rem, 1vw, .95rem) 1rem; outline: none; color: var(--panel-ink); background: #fff; font: inherit; font-size: clamp(.7rem, .8vw, .88rem); transition: border-color .25s, box-shadow .25s; }
   .auth-form input::placeholder { color: #9ba8b7; }
-  .auth-form input:focus { border-color: var(--accent-strong); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+  .auth-form input:focus { border-color: var(--accent-strong); }
+  .auth-field input, .auth-field input:focus, .auth-field input:invalid, .auth-field input:focus-visible { outline: none; box-shadow: none; }
+  .auth-form input:-moz-ui-invalid { box-shadow: none; }
+  .auth-field input:focus + .auth-field__line { background: var(--accent-strong); transform: scaleX(1); }
+  .auth-options { display: flex; margin-top: .9rem; }
+  .auth-remember { display: inline-flex; align-items: center; gap: .55rem; margin-top: 0 !important; color: #53647a !important; cursor: pointer; font-size: clamp(.62rem, .72vw, .78rem) !important; font-weight: 600 !important; }
+  .auth-remember input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+  .auth-remember__box { display: inline-grid; width: 18px; height: 18px; flex: 0 0 18px; place-items: center; border: 1px solid #c8d2de; border-radius: 5px; background: #fff; transition: border-color .2s, background-color .2s, box-shadow .2s; }
+  .auth-remember__box::after { width: 8px; height: 4px; transform: rotate(-45deg) scale(0); border-bottom: 2px solid #fff; border-left: 2px solid #fff; content: ""; transition: transform .15s ease; }
+  .auth-remember input:checked + .auth-remember__box { border-color: var(--accent-strong); background: var(--accent-strong); }
+  .auth-remember input:checked + .auth-remember__box::after { transform: rotate(-45deg) scale(1); }
+  .auth-remember input:focus-visible + .auth-remember__box { outline: 2px solid #8794a5; outline-offset: 2px; }
   .auth-password-toggle { position: absolute; top: 50%; right: .7rem; border: 0; padding: .25rem; transform: translateY(-50%); color: var(--accent-strong); background: transparent; cursor: pointer; font-size: clamp(.6rem, .7vw, .75rem); font-weight: 700; }
   .auth-form__error { margin: .45rem 0 0; color: #b52e3a; font-size: clamp(.62rem, .7vw, .76rem); animation: error-shake 400ms ease; }
   .auth-submit { position: relative; display: flex; align-items: center; justify-content: space-between; overflow: hidden; margin-top: clamp(.8rem, 1.4vw, 1.5rem); border: 0; border-radius: 9px; padding: clamp(.75rem, 1vw, 1rem) 1.1rem; color: #fff; background: var(--intro-start); cursor: pointer; font: inherit; font-size: clamp(.66rem, .76vw, .82rem); font-weight: 700; transition: background 700ms ease, box-shadow .2s, transform .2s; }

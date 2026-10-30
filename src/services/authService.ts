@@ -5,6 +5,13 @@ export function studentAuthEmail(matricNumber: string) {
   return `${normalized}@student.local`
 }
 
+const REMEMBER_ME_KEY = 'ppst-remember-me'
+
+export function setRememberMe(remember: boolean) {
+  if (remember) localStorage.setItem(REMEMBER_ME_KEY, 'true')
+  else localStorage.removeItem(REMEMBER_ME_KEY)
+}
+
 /**
  * Login by Matric Number + IC Number (PRD section 6 — no public registration,
  * accounts are pre-imported by administrators).
@@ -22,7 +29,8 @@ export function studentAuthEmail(matricNumber: string) {
  * than querying the `users` table directly with the anon key, so unauthenticated
  * users can't enumerate matric numbers / emails.
  */
-export async function loginWithMatric(matricNumber: string, password: string) {
+export async function loginWithMatric(matricNumber: string, password: string, remember = false) {
+  setRememberMe(remember)
   const { data: emailLookup, error: lookupError } = await supabase.rpc(
     'get_login_email',
     { p_matric_number: matricNumber.trim() },
@@ -41,7 +49,8 @@ export async function loginWithMatric(matricNumber: string, password: string) {
   return data
 }
 
-export async function loginWithEmail(email: string, password: string) {
+export async function loginWithEmail(email: string, password: string, remember = false) {
+  setRememberMe(remember)
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
