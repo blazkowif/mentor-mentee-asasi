@@ -119,6 +119,18 @@ npm run dev
   `supabase functions deploy admin-user`. If imports fail with an authorization
   or function error, this deployment and the logged-in administrator profile
   are the first things to verify.
+- Student Excel fields (`Status SMP`, `Kumpulan Kuliah`, `Kolej Kediaman`,
+  `No. Bilik`, and `Status BKA`) require migration `0033_student_import_fields.sql`.
+  Apply all pending migrations before deploying the frontend:
+  `npx supabase db push`, then redeploy the function with
+  `npx supabase functions deploy admin-user`. The function has a legacy-schema
+  fallback during rollout, but the new fields cannot be stored until migration
+  0033 has been applied.
+- Imports are safe to retry: existing students are matched by matric number
+  and existing mentors by email, then updated instead of creating duplicate
+  Auth accounts. Apply migration `0034_reset_data_keep_admin.sql` only when a
+  full non-admin reset is intended, and redeploy `admin-user` after any
+  function change.
 
 
 ## For developer testing

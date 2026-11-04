@@ -13,6 +13,7 @@ import AssignmentPage from './AssignmentPage'
 import LoadingButton from '@/components/LoadingButton'
 import * as mentorNotesService from '@/services/mentorNotesService'
 import MeetingSummary from '@/features/meetings/MeetingSummary'
+import MeetingPanel from '@/features/meetings/MeetingPanel'
 
 type Role = Database['public']['Enums']['user_role']
 type ImportField =
@@ -486,7 +487,12 @@ export default function AdminControlPage() {
       {tab === 'assignment' && <AssignmentPage />}
       {tab === 'lists' && !usersQuery.isError && <ExportSection students={students} mentees={mentees} mentors={mentors} staff={staff} />}
       {tab === 'content' && <ContentManager users={users} tasks={tasksQuery.data ?? []} announcements={announcementsQuery.data ?? []} adminId={currentUser?.id ?? ''} onMessage={setMessage} onError={setError} />}
-      {tab === 'meetings' && <MeetingSummary />}
+      {tab === 'meetings' && (
+        <div className="space-y-6">
+          <MeetingPanel />
+          <MeetingSummary />
+        </div>
+      )}
     </div>
   )
 }
@@ -731,6 +737,7 @@ function ExportSection({
 }
 
 function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () => void; onMessage: (value: string) => void; onError: (value: string) => void }) {
+  type ImportFailure = { rowNumber: number; name: string; identifier: string; reason: string }
   const [headers, setHeaders] = useState<string[]>([])
   const [rows, setRows] = useState<Record<string, string>[]>([])
   const [mapping, setMapping] = useState<Partial<Record<ImportField, string>>>({})
@@ -741,6 +748,8 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
   const [importing, setImporting] = useState(false)
   const cancelImportRequested = useRef(false)
   const [progress, setProgress] = useState({ current: 0, imported: 0, failed: 0 })
+  const [failedRows, setFailedRows] = useState<ImportFailure[]>([])
+  const [showFailureDetails, setShowFailureDetails] = useState(false)
   const [individualRole, setIndividualRole] = useState<Role>('lecturer')
   const [individualForm, setIndividualForm] = useState({
     name: '',
@@ -840,17 +849,65 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
     if (!file) return
     try {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
-      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const sheetName = workbook.SheetNames[0]
+      const sheet = workbook.Sheets[sheetName]
       if (!sheet) throw new Error('The workbook does not contain a readable worksheet.')
-      const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', raw: false })
-      const nextHeaders = records.length
-        ? Object.keys(records[0]).map((header) => header.trim())
-        : []
+      const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+        header: 1,
+        defval: '',
+        raw: false,
+        blankrows: false,
+      })
+      const normalizeHeader = (value: string) => value
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+      const knownHeaders = [
+        'no matrik', 'nomatrik', 'matric number', 'no kad pengenalan', 'nama pelajar',
+        'kp', 'ic number', 'nama', 'name', 'jantina', 'gender', 'agama', 'agama bm',
+        'religion', 'kaum', 'kaum bm', 'race', 'no telefon whatsapp', 'no telefon',
+        'notelbimbit', 'phone', 'program asasi', 'nama program', 'program', 'programme',
+        'saluran', 'channel', 'alamat rumah', 'alamat', 'address', 'poskod', 'postcode',
+        'bandar', 'city', 'negeri', 'state', 'status pengajian', 'study status',
+        'status smp', 'kumpulan kuliah', 'kolej kediaman', 'no bilik', 'nama mentor',
+        'mentor', 'status bka', 'email', 'jawatan', 'job title', 'position', 'gred',
+        'grade', 'ums per', 'ums_per', 'ums perkhidmatan', 'per',
+      ].map(normalizeHeader)
+      const headerRowIndex = matrix.findIndex((row) => {
+        const matches = row
+          .map((value) => normalizeHeader(String(value ?? '').trim()))
+          .filter((value) => value && knownHeaders.includes(value))
+        return matches.length >= 2
+      })
+      if (headerRowIndex < 0) {
+        const candidateRows = matrix.slice(0, 20).map((row, index) => {
+          const recognized = row
+            .map((value) => normalizeHeader(String(value ?? '').trim()))
+            .filter((value) => value && knownHeaders.includes(value))
+          return recognized.length ? `row ${index + 1}: ${recognized.length} recognized column${recognized.length === 1 ? '' : 's'} (${recognized.join(', ')})` : ''
+        }).filter(Boolean)
+        const detail = candidateRows.length
+          ? ` ${candidateRows.join('; ')}.`
+          : ' No supported headers were detected in the first 20 rows.'
+        throw new Error(`Could not find the spreadsheet header row: at least 2 supported columns are required (for example Nama and Nomatrik).${detail}`)
+      }
+      const rawHeaders = matrix[headerRowIndex].map((value) => String(value ?? '').trim())
+      const usedHeaders = new Map<string, number>()
+      const nextHeaders = rawHeaders.map((header, index) => {
+        const baseHeader = header || `Unnamed column ${index + 1}`
+        const occurrence = (usedHeaders.get(baseHeader) ?? 0) + 1
+        usedHeaders.set(baseHeader, occurrence)
+        return occurrence === 1 ? baseHeader : `${baseHeader} (${occurrence})`
+      })
       if (!nextHeaders.length) throw new Error('The selected worksheet is empty or has no header row.')
+      const records = matrix.slice(headerRowIndex + 1).map((row) => Object.fromEntries(
+        nextHeaders.map((header, index) => [header, String(row[index] ?? '').trim()]),
+      ))
       setHeaders(nextHeaders)
-      setRows(records.map((row) => Object.fromEntries(
-        Object.entries(row).map(([key, value]) => [key.trim(), String(value).trim()]),
-      )))
+      setRows(records)
+      setFailedRows([])
+      setShowFailureDetails(false)
       const defaultMapping: Partial<Record<ImportField, string>> = {}
       const aliases: Partial<Record<ImportField, string[]>> = {
         matric_number: ['no matrik', 'nomatrik', 'matric number'],
@@ -878,11 +935,6 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
         grade: ['gred', 'grade'],
         ums_per: ['ums per', 'ums_per', 'ums perkhidmatan', 'per'],
       }
-      const normalizeHeader = (value: string) => value
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '')
       for (const field of [...importFields, ...mentorImportFields]) {
         const accepted = aliases[field] ?? [field]
         const normalizedAccepted = accepted.map(normalizeHeader)
@@ -891,7 +943,7 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
       }
       setMapping(defaultMapping)
       setPasswordColumn(nextHeaders.find((value) => value.trim().toLowerCase() === 'kp') ?? '')
-      onMessage(`${records.length} rows loaded. Map the columns before importing.`)
+      onMessage(`${records.length} rows loaded from worksheet "${sheetName}" (header row ${headerRowIndex + 1}). Map the columns before importing.`)
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Unable to read spreadsheet.')
     }
@@ -901,6 +953,13 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
     const nameColumn = mapping.name
     const matricColumn = mapping.matric_number
     const emailColumn = mapping.email
+    const missingMappedColumns = Object.entries(mapping)
+      .filter(([, column]) => column && !headers.includes(column))
+      .map(([field, column]) => `${field} → ${column}`)
+    if (missingMappedColumns.length) {
+      onError(`The selected spreadsheet no longer contains mapped column(s): ${missingMappedColumns.join(', ')}. Reload the file and map those fields again.`)
+      return
+    }
     if (!nameColumn || (importRole !== 'student' && !emailColumn)) {
       onError(importRole === 'student'
         ? 'Map Nama before importing students. Nomatrik is optional.'
@@ -922,22 +981,31 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
     setImporting(true)
     cancelImportRequested.current = false
     setProgress({ current: 0, imported: 0, failed: 0 })
+    setFailedRows([])
+    setShowFailureDetails(false)
     try {
       let imported = 0
-      const failures: string[] = []
+      const failures: ImportFailure[] = []
+      const warnings: string[] = []
       for (const [index, row] of rows.entries()) {
         if (cancelImportRequested.current) break
         const rowNumber = index + 2
         try {
           const name = row[nameColumn]?.trim()
           const matricNumber = matricColumn ? row[matricColumn]?.trim() : ''
+          const rowHasData = Object.values(row).some((value) => value.trim())
+          if (!rowHasData) continue
+          if (!name) throw new Error('Nama is empty.')
+          if (matricNumber && !matricNumber.replace(/[^a-z0-9]/gi, '')) {
+            throw new Error('NoMatrik contains no usable letters or numbers.')
+          }
           const email = importRole === 'student'
             ? matricNumber ? studentAuthEmail(matricNumber) : `pending-${index + 2}-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}@student.local`
             : row[emailColumn!]?.trim()
           const password = passwordMode === 'column'
             ? row[passwordColumn]?.trim() || defaultPassword.trim()
             : defaultPassword.trim()
-          if (!name || !email || !password) {
+          if (!email || !password) {
             throw new Error(importRole === 'student'
               ? 'Nama and the selected password value are required.'
               : 'Nama, Email, and the selected password value are required.')
@@ -949,12 +1017,13 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
           let mentorId: string | null = null
           if (mentorValue) {
             const mentor = await adminService.findUserByIdentifier(mentorValue)
-            if (!mentor || mentor.role !== 'lecturer') {
-              throw new Error(`Mentor "${mentorValue}" was not found as a lecturer.`)
+            if (mentor?.role === 'lecturer') {
+              mentorId = mentor.id
+            } else {
+              warnings.push(`Row ${rowNumber}: mentor "${mentorValue}" was not found; student imported without a mentor.`)
             }
-            mentorId = mentor.id
           }
-          await adminService.createManagedUser({
+          const userInput = {
             name,
             role: importRole,
             email,
@@ -981,10 +1050,30 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
             job_title: mapping.job_title ? row[mapping.job_title] || undefined : undefined,
             grade: mapping.grade ? row[mapping.grade] || undefined : undefined,
             ums_per: mapping.ums_per ? row[mapping.ums_per] || undefined : undefined,
-          })
+          } satisfies adminService.UserInput
+          const existingUser = importRole === 'student' && matricNumber
+            ? await adminService.findUserByIdentifier(matricNumber)
+            : importRole === 'lecturer'
+              ? await adminService.findUserByIdentifier(email)
+              : null
+          if (existingUser && existingUser.role !== importRole) {
+            throw new Error(`An existing ${existingUser.role} account already uses this identifier.`)
+          }
+          if (existingUser) {
+            await adminService.updateManagedUser(existingUser.id, userInput)
+          } else {
+            await adminService.createManagedUser(userInput)
+          }
           imported += 1
         } catch (err) {
-          failures.push(`Row ${rowNumber} (${row[nameColumn] || 'unnamed'}): ${err instanceof Error ? err.message : 'unknown error'}`)
+          const failure = {
+            rowNumber,
+            name: row[nameColumn]?.trim() || 'unnamed',
+            identifier: matricColumn ? row[matricColumn]?.trim() || '' : '',
+            reason: err instanceof Error ? err.message : 'unknown error',
+          }
+          failures.push(failure)
+          setFailedRows([...failures])
         } finally {
           setProgress(() => ({
             current: index + 1,
@@ -1000,7 +1089,9 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
         return
       }
       if (failures.length) {
-        onError(`${imported} of ${rows.length} imported. Failed rows:\n${failures.slice(0, 10).join('\n')}${failures.length > 10 ? `\n…and ${failures.length - 10} more.` : ''}`)
+        onError(`${imported} of ${rows.length} imported. ${failures.length} row${failures.length === 1 ? '' : 's'} failed. Use View details beside the failed count to inspect them.`)
+      } else if (warnings.length) {
+        onMessage(`${imported} users imported. ${warnings.length} mentor assignment${warnings.length === 1 ? '' : 's'} skipped because the mentor account was not found.`)
       } else {
         onMessage(`${imported} users imported successfully.`)
       }
@@ -1130,7 +1221,14 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
         <div className="rounded border border-blue-100 bg-blue-50 p-3" aria-live="polite">
           <div className="mb-2 flex items-center justify-between text-xs text-blue-800">
             <span>Importing row {progress.current} of {rows.length}</span>
-            <span>{progress.imported} imported · {progress.failed} failed</span>
+            <span className="flex items-center gap-2">
+              <span>{progress.imported} imported · {progress.failed} failed</span>
+              {progress.failed > 0 && (
+                <button type="button" onClick={() => setShowFailureDetails((visible) => !visible)} className="font-medium text-red-700 underline">
+                  {showFailureDetails ? 'Hide details' : 'View details'}
+                </button>
+              )}
+            </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-blue-100">
             <div className="h-full rounded-full bg-ums-blue transition-all" style={{ width: `${rows.length ? (progress.current / rows.length) * 100 : 0}%` }} />
@@ -1138,11 +1236,45 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
           <button type="button" onClick={requestImportCancel} className="mt-3 rounded border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
             Force cancel import
           </button>
+          {showFailureDetails && failedRows.length > 0 && <ImportFailureDetails failures={failedRows} />}
+        </div>
+      )}
+      {!importing && failedRows.length > 0 && (
+        <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+          <div className="flex items-center justify-between gap-3">
+            <span>{failedRows.length} import row{failedRows.length === 1 ? '' : 's'} failed.</span>
+            <button type="button" onClick={() => setShowFailureDetails((visible) => !visible)} className="font-medium text-red-700 underline">
+              {showFailureDetails ? 'Hide details' : 'View details'}
+            </button>
+          </div>
+          {showFailureDetails && <ImportFailureDetails failures={failedRows} />}
         </div>
       )}
       <button disabled={importing || rows.length === 0} onClick={importUsers} className="rounded bg-ums-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{importing ? `Importing ${rows.length} accounts…` : `Import ${rows.length} ${importRole === 'student' ? 'students' : 'mentors'}`}</button>
     </div>}
   </section>
+}
+
+function ImportFailureDetails({ failures }: { failures: Array<{ rowNumber: number; name: string; identifier: string; reason: string }> }) {
+  return (
+    <div className="mt-3 max-h-80 overflow-y-auto rounded border border-red-200 bg-white">
+      <table className="w-full text-left text-xs">
+        <thead className="sticky top-0 bg-red-100 text-red-900">
+          <tr><th className="p-2">Row</th><th className="p-2">Student</th><th className="p-2">Nomatrik</th><th className="p-2">Why it failed</th></tr>
+        </thead>
+        <tbody className="divide-y divide-red-100">
+          {failures.map((failure) => (
+            <tr key={`${failure.rowNumber}-${failure.identifier}`}>
+              <td className="p-2 align-top">{failure.rowNumber}</td>
+              <td className="p-2 align-top font-medium">{failure.name}</td>
+              <td className="p-2 align-top">{failure.identifier || '—'}</td>
+              <td className="p-2 align-top text-red-800">{failure.reason}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
 function fieldLabel(field: ImportField) {
@@ -1293,9 +1425,19 @@ function ContentManager({ users, tasks, announcements, adminId, onMessage, onErr
     setDeletingAnnouncementId(id)
     try { await announcementService.deleteAnnouncement(id); await queryClient.invalidateQueries({ queryKey: ['admin', 'announcements'] }); onMessage('Announcement deleted.') } catch (err) { onError(err instanceof Error ? err.message : 'Unable to delete announcement.') } finally { setDeletingAnnouncementId(null) }
   }
+  async function clearTasks() {
+    if (!window.confirm('Clear every task and task submission? This cannot be undone.')) return
+    setBusy(true)
+    try { await taskService.clearAllTasks(); await queryClient.invalidateQueries({ queryKey: ['admin', 'tasks'] }); onMessage('All tasks cleared.') } catch (err) { onError(err instanceof Error ? err.message : 'Unable to clear tasks.') } finally { setBusy(false) }
+  }
+  async function clearAnnouncements() {
+    if (!window.confirm('Clear every announcement? This cannot be undone.')) return
+    setBusy(true)
+    try { await announcementService.clearAllAnnouncements(); await queryClient.invalidateQueries({ queryKey: ['admin', 'announcements'] }); onMessage('All announcements cleared.') } catch (err) { onError(err instanceof Error ? err.message : 'Unable to clear announcements.') } finally { setBusy(false) }
+  }
 
   return <section className="grid gap-6 lg:grid-cols-2">
-    <div className="rounded-lg bg-white p-4 shadow-sm"><h2 className="mb-3 font-semibold">Assignments</h2><select className="mb-2 w-full rounded border px-3 py-2 text-sm" value={selectedLecturerId} onChange={(event) => setLecturerId(event.target.value)}><option value="">Select lecturer</option>{lecturers.map((lecturer) => <option key={lecturer.id} value={lecturer.id}>{lecturer.name}</option>)}</select><input className="mb-2 w-full rounded border px-3 py-2 text-sm" placeholder="Assignment title" value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} /><input type="date" className="mb-3 w-full rounded border px-3 py-2 text-sm" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /><LoadingButton loading={busy} loadingLabel="Adding assignment…" disabled={!selectedLecturerId} onClick={createTask} className="rounded bg-ums-blue px-3 py-2 text-sm text-white">Add assignment</LoadingButton><div className="mt-5 space-y-2">{tasks.map((task) => <div key={task.id} className="flex justify-between border-b pb-2 text-sm"><span>{task.title}</span><LoadingButton loading={deletingTaskId === task.id} loadingLabel="Deleting…" onClick={() => removeTask(task.id)} className="text-red-600">Delete</LoadingButton></div>)}</div></div>
-    <div className="rounded-lg bg-white p-4 shadow-sm"><h2 className="mb-3 font-semibold">Global announcements</h2><input className="mb-2 w-full rounded border px-3 py-2 text-sm" placeholder="Announcement title" value={title} onChange={(event) => setTitle(event.target.value)} /><textarea className="mb-3 w-full rounded border px-3 py-2 text-sm" rows={4} placeholder="Announcement content" value={content} onChange={(event) => setContent(event.target.value)} /><LoadingButton loading={busy} loadingLabel="Posting announcement…" onClick={createAnnouncement} className="rounded bg-ums-blue px-3 py-2 text-sm text-white">Post announcement</LoadingButton><div className="mt-5 space-y-2">{announcements.map((announcement) => <div key={announcement.id} className="flex justify-between border-b pb-2 text-sm"><span>{announcement.title}{announcement.is_global ? ' (global)' : ''}</span><LoadingButton loading={deletingAnnouncementId === announcement.id} loadingLabel="Deleting…" onClick={() => removeAnnouncement(announcement.id)} className="text-red-600">Delete</LoadingButton></div>)}</div></div>
+    <div className="rounded-lg bg-white p-4 shadow-sm"><div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">Assignments</h2><button type="button" onClick={clearTasks} disabled={busy} className="text-xs font-medium text-red-600 disabled:opacity-50">Clear all tasks</button></div><select className="mb-2 w-full rounded border px-3 py-2 text-sm" value={selectedLecturerId} onChange={(event) => setLecturerId(event.target.value)}><option value="">Select lecturer</option>{lecturers.map((lecturer) => <option key={lecturer.id} value={lecturer.id}>{lecturer.name}</option>)}</select><input className="mb-2 w-full rounded border px-3 py-2 text-sm" placeholder="Assignment title" value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} /><input type="date" className="mb-3 w-full rounded border px-3 py-2 text-sm" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /><LoadingButton loading={busy} loadingLabel="Adding assignment…" disabled={!selectedLecturerId} onClick={createTask} className="rounded bg-ums-blue px-3 py-2 text-sm text-white">Add assignment</LoadingButton><div className="mt-5 space-y-2">{tasks.map((task) => <div key={task.id} className="flex justify-between border-b pb-2 text-sm"><span>{task.title}</span><LoadingButton loading={deletingTaskId === task.id} loadingLabel="Deleting…" onClick={() => removeTask(task.id)} className="text-red-600">Delete</LoadingButton></div>)}</div></div>
+    <div className="rounded-lg bg-white p-4 shadow-sm"><div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">Global announcements</h2><button type="button" onClick={clearAnnouncements} disabled={busy} className="text-xs font-medium text-red-600 disabled:opacity-50">Clear all</button></div><input className="mb-2 w-full rounded border px-3 py-2 text-sm" placeholder="Announcement title" value={title} onChange={(event) => setTitle(event.target.value)} /><textarea className="mb-3 w-full rounded border px-3 py-2 text-sm" rows={4} placeholder="Announcement content" value={content} onChange={(event) => setContent(event.target.value)} /><LoadingButton loading={busy} loadingLabel="Posting announcement…" onClick={createAnnouncement} className="rounded bg-ums-blue px-3 py-2 text-sm text-white">Post announcement</LoadingButton><div className="mt-5 space-y-2">{announcements.map((announcement) => <div key={announcement.id} className="flex justify-between border-b pb-2 text-sm"><span>{announcement.title}{announcement.is_global ? ' (global)' : ''}</span><LoadingButton loading={deletingAnnouncementId === announcement.id} loadingLabel="Deleting…" onClick={() => removeAnnouncement(announcement.id)} className="text-red-600">Delete</LoadingButton></div>)}</div></div>
   </section>
 }

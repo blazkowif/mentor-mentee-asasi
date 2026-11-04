@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
 type UserPayload = {
@@ -37,7 +38,7 @@ type UserPayload = {
 }
 
 Deno.serve(async (request) => {
-  if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
   try {
     const authHeader = request.headers.get('Authorization')
     if (!authHeader) throw new Error('Missing authorization.')
@@ -76,6 +77,7 @@ Deno.serve(async (request) => {
       const result = await deleteAccounts(admin, mentors ?? [])
       return json({ ok: result.failed.length === 0, ...result })
     }
+    if (!user) throw new Error('User details are required.')
     if (action === 'delete') {
       if (!user?.id) throw new Error('User id is required.')
       const { error } = await admin.auth.admin.deleteUser(user.id)
@@ -125,32 +127,32 @@ Deno.serve(async (request) => {
     }
     let profilePayload: Record<string, unknown> = {
       id,
-      name: user.name,
-      role: user.role,
-      email: user.role === 'student' && user.matric_number ? user.matric_number : user.email,
-      matric_number: user.matric_number,
-      programme: user.programme,
-      phone: user.phone,
-      mentor_id: user.mentor_id,
-      ic_number: user.ic_number,
-      gender: user.gender,
-      religion: user.religion,
-      race: user.race,
-      address: user.address,
-      postcode: user.postcode,
-      city: user.city,
-      state: user.state,
-      study_status: user.study_status,
-      channel: user.channel,
-      motto: user.motto,
-      job_title: user.job_title,
-      grade: user.grade,
-      ums_per: user.ums_per,
-      study_status_smp: user.study_status_smp,
-      lecture_group: user.lecture_group,
-      residence_college: user.residence_college,
-      room_number: user.room_number,
-      bka_status: user.bka_status,
+      name: effectiveName,
+      role: effectiveRole,
+      email: effectiveRole === 'student' && effectiveMatric ? effectiveMatric : effectiveEmail,
+      matric_number: user.matric_number ?? existingProfile?.matric_number,
+      programme: user.programme ?? existingProfile?.programme,
+      phone: user.phone ?? existingProfile?.phone,
+      mentor_id: user.mentor_id ?? existingProfile?.mentor_id,
+      ic_number: user.ic_number ?? existingProfile?.ic_number,
+      gender: user.gender ?? existingProfile?.gender,
+      religion: user.religion ?? existingProfile?.religion,
+      race: user.race ?? existingProfile?.race,
+      address: user.address ?? existingProfile?.address,
+      postcode: user.postcode ?? existingProfile?.postcode,
+      city: user.city ?? existingProfile?.city,
+      state: user.state ?? existingProfile?.state,
+      study_status: user.study_status ?? existingProfile?.study_status,
+      channel: user.channel ?? existingProfile?.channel,
+      motto: user.motto ?? existingProfile?.motto,
+      job_title: user.job_title ?? existingProfile?.job_title,
+      grade: user.grade ?? existingProfile?.grade,
+      ums_per: user.ums_per ?? existingProfile?.ums_per,
+      study_status_smp: user.study_status_smp ?? existingProfile?.study_status_smp,
+      lecture_group: user.lecture_group ?? existingProfile?.lecture_group,
+      residence_college: user.residence_college ?? existingProfile?.residence_college,
+      room_number: user.room_number ?? existingProfile?.room_number,
+      bka_status: user.bka_status ?? existingProfile?.bka_status,
     }
     if (action === 'update') {
       profilePayload = {
@@ -160,9 +162,18 @@ Deno.serve(async (request) => {
         ),
       }
     }
-    const { data: profile, error: profileError } = await admin.from('users').upsert(profilePayload)
-      .select('id, role, matric_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, study_status_smp, lecture_group, residence_college, room_number, bka_status, channel, motto, job_title, grade, ums_per, created_at').single()
-    if (profileError) throw profileError
+    let profileResult = await admin.from('users').upsert(profilePayload).select('*').single()
+    if (profileResult.error && isMissingStudentImportFields(profileResult.error)) {
+      const legacyPayload = Object.fromEntries(
+        Object.entries(profilePayload).filter(([key]) => !OPTIONAL_PROFILE_FIELDS.has(key)),
+      )
+      profileResult = await admin.from('users').upsert(legacyPayload).select('*').single()
+    }
+    if (profileResult.error) {
+      if (action === 'create' && id) await admin.auth.admin.deleteUser(id)
+      throw profileResult.error
+    }
+    const profile = profileResult.data
     return json({ user: profile })
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : 'Account operation failed.' }, 400)
@@ -176,6 +187,34 @@ function json(body: unknown, status = 200) {
 function studentAuthEmail(matricNumber: string) {
   const normalized = matricNumber.trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
   return `${normalized}@student.local`
+}
+
+const OPTIONAL_PROFILE_FIELDS = new Set([
+  'ic_number',
+  'gender',
+  'religion',
+  'race',
+  'phone',
+  'address',
+  'postcode',
+  'city',
+  'state',
+  'study_status',
+  'channel',
+  'motto',
+  'job_title',
+  'grade',
+  'ums_per',
+  'study_status_smp',
+  'lecture_group',
+  'residence_college',
+  'room_number',
+  'bka_status',
+])
+
+function isMissingStudentImportFields(error: { code?: string; message?: string }) {
+  if (error.code === '42703' || error.code === 'PGRST204') return true
+  return Boolean(error.message?.match(/ic_number|gender|religion|race|phone|address|postcode|city|state|study_status|channel|motto|job_title|grade|ums_per|lecture_group|residence_college|room_number|bka_status/i))
 }
 
 async function deleteAccounts(

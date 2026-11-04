@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/features/auth/authStore'
 import { useMentees } from '@/features/chat/hooks/useChat'
 import { useLecturerTasks, useMentorTasks, useCreateTask } from './hooks/useTasks'
@@ -8,11 +8,17 @@ import * as adminService from '@/services/adminService'
 import LecturerTaskItem from './components/LecturerTaskItem'
 import StudentTaskItem from './components/StudentTaskItem'
 import MeetingPanel from '@/features/meetings/MeetingPanel'
+import * as notificationService from '@/services/notificationService'
 
 // Task list/detail/submission flow (PRD §11).
 export default function TasksPage() {
   const user = useAuthStore((s) => s.user)
   const role = useAuthStore((s) => s.role)
+  useEffect(() => {
+    if (!user) return
+    notificationService.markTitlesAsRead(user.id, ['New task assigned'])
+      .catch(() => undefined)
+  }, [user])
   const [showForm, setShowForm] = useState(false)
   const { data: mentees = [] } = useMentees(role === 'lecturer' ? user?.id : undefined)
   const usersQuery = useQuery({ queryKey: ['users', 'content-targets'], queryFn: adminService.listAllUsers, enabled: role === 'admin' })

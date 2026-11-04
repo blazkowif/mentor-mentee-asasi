@@ -27,3 +27,13 @@ export async function markAllAsRead(userId: string) {
     .eq('is_read', false)
   if (error) throw error
 }
+
+export async function markTitlesAsRead(userId: string, titles: string[]) {
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('user_id', userId)
+    .eq('is_read', false)
+    .in('title', titles)
+  if (error) throw error
+}

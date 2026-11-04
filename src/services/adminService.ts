@@ -46,7 +46,9 @@ type UserQueryResult = {
 type UserQueryBuilder = PromiseLike<UserQueryResult>
 
 function isMissingMentorStaffFields(error: { code?: string; message?: string } | null) {
-  return error?.code === '42703' || Boolean(error?.message?.match(/job_title|ums_per|grade/i))
+  return error?.code === '42703'
+    || error?.code === 'PGRST204'
+    || Boolean(error?.message?.match(/job_title|ums_per|grade|study_status_smp|lecture_group|residence_college|room_number|bka_status/i))
 }
 
 async function selectUsersWithSchemaFallback(
@@ -112,8 +114,8 @@ export async function findUserByIdentifier(identifier: string): Promise<UserRow 
   const value = identifier.trim()
   if (!value) return null
   const fields = [
-    ['id', value],
-    ['email', value],
+    ...(isUuid(value) ? [['id', value] as const] : []),
+    ['email', value] as const,
     ['matric_number', value],
     ['name', value],
   ] as const
@@ -128,6 +130,10 @@ export async function findUserByIdentifier(identifier: string): Promise<UserRow 
     if (data && data.length > 1) throw new Error(`Mentor value "${value}" matches more than one user.`)
   }
   return null
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
 
 export async function getUserActivity(userId: string, limit = 20): Promise<any[]> {

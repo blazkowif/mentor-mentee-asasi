@@ -18,6 +18,9 @@ export default function ProfileSidebar() {
   const unreadChatCount = notifications.filter(
     (notification) => !notification.is_read && notification.title === 'New chat message',
   ).length
+  const unreadTaskCount = notifications.filter((notification) => !notification.is_read && notification.title === 'New task assigned').length
+  const unreadAnnouncementCount = notifications.filter((notification) => !notification.is_read && notification.title === 'New announcement').length
+  const unreadNotificationCount = notifications.filter((notification) => !notification.is_read).length
 
   const { data: mentor } = useQuery({
     queryKey: queryKeys.users.mentor(user?.id ?? ''),
@@ -110,10 +113,10 @@ export default function ProfileSidebar() {
             <p className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Main menu</p>
             <NavItem to={user.role === 'admin' ? '/admin/control' : '/dashboard'} label={user.role === 'admin' ? 'Admin Dashboard' : 'Dashboard'} />
             <NavItem to="/chat" label="Chat" unreadCount={unreadChatCount} />
-            <NavItem to="/tasks" label={user.role === 'lecturer' ? 'Meeting report' : 'Tasks'} />
+            <NavItem to="/tasks" label={user.role === 'lecturer' ? 'Meeting report' : 'Tasks'} unreadCount={unreadTaskCount} />
             {user.role === 'lecturer' && <NavItem to="/mentor-notes" label="Private notes" />}
-            <NavItem to="/announcements" label="Announcements" />
-            <NavItem to="/notifications" label="Notifications" />
+            <NavItem to="/announcements" label="Announcements" unreadCount={unreadAnnouncementCount} />
+            <NavItem to="/notifications" label="Notifications" unreadCount={unreadNotificationCount} />
             <NavItem to="/profile" label="Profile" />
           </nav>
         </div>

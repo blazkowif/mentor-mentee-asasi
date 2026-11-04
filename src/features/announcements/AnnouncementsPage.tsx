@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/features/auth/authStore'
 import { useMentees, useMentor } from '@/features/chat/hooks/useChat'
 import {
@@ -9,6 +9,9 @@ import * as announcementService from '@/services/announcementService'
 import * as adminService from '@/services/adminService'
 import { uploadFile, getPublicUrl } from '@/services/storageService'
 import type { Database } from '@/types/database.types'
+import * as notificationService from '@/services/notificationService'
+import { useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '@/lib/queryKeys'
 
 type Announcement = Database['public']['Tables']['announcements']['Row']
 import AnnouncementForm from './components/AnnouncementForm'
@@ -18,6 +21,13 @@ import AnnouncementCard from './components/AnnouncementCard'
 export default function AnnouncementsPage() {
   const user = useAuthStore((s) => s.user)
   const role = useAuthStore((s) => s.role)
+  const queryClient = useQueryClient()
+  useEffect(() => {
+    if (!user) return
+    notificationService.markTitlesAsRead(user.id, ['New announcement'])
+      .then(() => queryClient.invalidateQueries({ queryKey: queryKeys.notifications.byUser(user.id) }))
+      .catch(() => undefined)
+  }, [queryClient, user])
   const [showForm, setShowForm] = useState(false)
   const [formError, setFormError] = useState('')
   const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null)

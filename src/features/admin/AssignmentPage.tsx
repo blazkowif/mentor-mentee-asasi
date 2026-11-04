@@ -11,7 +11,6 @@ type ImportMatch = {
   student: adminService.UserRow | null
   mentor: adminService.UserRow | null
   matricValue: string
-  programmeValue: string
   studentValue: string
   mentorValue: string
   confidence: number
@@ -73,12 +72,11 @@ export default function AssignmentPage() {
   const [error, setError] = useState<string | null>(null)
   const [importMatches, setImportMatches] = useState<ImportMatch[]>([])
   const [importingFile, setImportingFile] = useState(false)
+  const [assignmentProgress, setAssignmentProgress] = useState({ current: 0, total: 0, assigned: 0, failed: 0 })
   const [assignmentHeaders, setAssignmentHeaders] = useState<string[]>([])
   const [assignmentRows, setAssignmentRows] = useState<Record<string, unknown>[]>([])
   const [assignmentMapping, setAssignmentMapping] = useState({
     matric: '',
-    name: '',
-    programme: '',
     mentor: '',
   })
 
@@ -127,19 +125,23 @@ export default function AssignmentPage() {
   })
   const importAssignments = useMutation({
     mutationFn: async () => {
-      const groups = new Map<string, string[]>()
-      importMatches.forEach((match) => {
-        if (!match.student || !match.mentor || match.confidence < 0.55) return
-        const ids = groups.get(match.mentor.id) ?? []
-        ids.push(match.student.id)
-        groups.set(match.mentor.id, ids)
-      })
-      await Promise.all(Array.from(groups, ([mentorId, ids]) => adminService.bulkAssignMentors(ids, mentorId)))
-      return groups.size
+      const validMatches = importMatches.filter((match) => match.student && match.mentor && match.confidence >= 0.55)
+      setAssignmentProgress({ current: 0, total: validMatches.length, assigned: 0, failed: 0 })
+      let assigned = 0
+      let failed = 0
+      for (const match of validMatches) {
+        try {
+          await adminService.bulkAssignMentors([match.student!.id], match.mentor!.id)
+          assigned += 1
+        } catch {
+          failed += 1
+        }
+        setAssignmentProgress({ current: assigned + failed, total: validMatches.length, assigned, failed })
+      }
+      return { assigned, failed }
     },
-    onSuccess: () => {
-      setImportMatches([])
-      setError(null)
+    onSuccess: ({ assigned, failed }) => {
+      setError(failed ? `${assigned} assignments applied; ${failed} existing student assignment${failed === 1 ? '' : 's'} failed.` : null)
       qc.invalidateQueries({ queryKey: queryKeys.users.all() })
       qc.invalidateQueries({ queryKey: queryKeys.admin.all })
     },
@@ -159,12 +161,10 @@ export default function AssignmentPage() {
       const findHeader = (aliases: string[]) => headers.find((header) => aliases.includes(normalize(header))) ?? ''
       const nextMapping = {
         matric: findHeader(['nomatrik', 'matricnumber', 'matric', 'studentid']),
-        name: findHeader(['nama', 'name', 'studentname', 'student']),
-        programme: findHeader(['namaprogram', 'program', 'programme', 'course']),
         mentor: findHeader(['mentor', 'mentname', 'mentorname', 'namamentor', 'lecturer']),
       }
-      if ((!nextMapping.matric && !nextMapping.name) || !nextMapping.mentor) {
-        throw new Error('The spreadsheet must contain a student column (Nama or NoMatrik) and a Mentor column.')
+      if (!nextMapping.matric || !nextMapping.mentor) {
+        throw new Error('The spreadsheet must contain both a No. MATRIK column and a NAMA MENTOR column.')
       }
       setAssignmentHeaders(headers)
       setAssignmentRows(records)
@@ -179,8 +179,8 @@ export default function AssignmentPage() {
   }
 
   function previewAssignments() {
-    if ((!assignmentMapping.matric && !assignmentMapping.name) || !assignmentMapping.mentor) {
-      setError('Select a student column (Nama or NoMatrik) and a Mentor column before previewing.')
+    if (!assignmentMapping.matric || !assignmentMapping.mentor) {
+      setError('Select both the No. MATRIK and NAMA MENTOR columns before previewing.')
       return
     }
     if (!assignmentRows.length) {
@@ -189,26 +189,20 @@ export default function AssignmentPage() {
     }
     const matches = assignmentRows.map((record, index) => {
         const matricValue = assignmentMapping.matric ? String(record[assignmentMapping.matric] ?? '').trim() : ''
-        const nameValue = assignmentMapping.name ? String(record[assignmentMapping.name] ?? '').trim() : ''
-        const programmeValue = assignmentMapping.programme ? String(record[assignmentMapping.programme] ?? '').trim() : ''
         const mentorValue = String(record[assignmentMapping.mentor] ?? '').trim()
-        const studentValue = nameValue || matricValue
-        const exactStudent = allStudents.find((student) =>
-          (matricValue && student.matric_number && normalize(student.matric_number) === normalize(matricValue)) ||
-          (nameValue && normalize(student.name) === normalize(nameValue)),
-        )
-        const student = exactStudent ?? bestMatch(studentValue, allStudents).mentor
+        const studentValue = matricValue
+        const student = allStudents.find((candidate) =>
+          candidate.matric_number && normalize(candidate.matric_number) === normalize(matricValue),
+        ) ?? null
         const mentorResult = bestMatch(mentorValue, mentors)
-        const studentConfidence = exactStudent ? 1 : bestMatch(studentValue, allStudents).confidence
         return {
           row: index + 2,
           student,
           mentor: mentorResult.mentor,
           matricValue,
-          programmeValue,
           studentValue,
           mentorValue,
-          confidence: Math.min(studentConfidence, mentorResult.confidence),
+          confidence: student ? mentorResult.confidence : 0,
         }
     })
     setImportMatches(matches)
@@ -280,15 +274,13 @@ export default function AssignmentPage() {
 
         <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-4">
           <h2 className="text-sm font-semibold text-blue-900">Import student–mentor assignments</h2>
-          <p className="mt-1 text-xs text-blue-800">Upload Excel with a student column (Nama or Nomatrik) and a Mentor column. Existing students are matched first by matric/name, then by typo- and prefix-tolerant name similarity.</p>
+          <p className="mt-1 text-xs text-blue-800">Upload Excel with No. MATRIK and NAMA MENTOR columns. Students must already exist and are matched strictly by matric number. Mentor names use smart matching against existing lecturers; no accounts are created.</p>
           <input type="file" accept=".xlsx,.xls,.csv" onChange={readAssignmentFile} disabled={importingFile} className="mt-3 block text-sm" />
           {assignmentHeaders.length > 0 && (
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {([
-                  ['matric', 'NoMatrik column', 'Optional if a Nama column is provided'],
-                  ['name', 'Nama column', 'Optional if a NoMatrik column is provided'],
-                  ['programme', 'Programme column', 'Optional'],
-                  ['mentor', 'Mentor column', 'Required'],
+                  ['matric', 'NO. MATRIK column', 'Required; must match an existing student'],
+                  ['mentor', 'NAMA MENTOR column', 'Required; matched to an existing lecturer'],
               ] as const).map(([field, label, help]) => (
                   <label key={field} className="text-xs font-medium text-blue-900">
                     {label}
@@ -312,11 +304,11 @@ export default function AssignmentPage() {
             <div className="mt-3 space-y-3">
               <div className="max-h-96 overflow-auto rounded bg-white">
                   <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 border-b bg-white"><tr><th className="p-2">Row</th><th className="p-2">NoMatrik</th><th className="p-2">Student in file</th><th className="p-2">Programme</th><th className="p-2">Detected student</th><th className="p-2">Mentor in file</th><th className="p-2">Detected mentor</th><th className="p-2">Confidence</th></tr></thead>
+                  <thead className="sticky top-0 border-b bg-white"><tr><th className="p-2">Row</th><th className="p-2">NO. MATRIK</th><th className="p-2">Existing student</th><th className="p-2">NAMA MENTOR</th><th className="p-2">Existing lecturer</th><th className="p-2">Confidence</th></tr></thead>
                   <tbody className="divide-y">
                     {importMatches.slice(0, 100).map((match) => (
                       <tr key={match.row} className={match.student && match.mentor && match.confidence >= 0.55 ? '' : 'bg-red-50'}>
-                          <td className="p-2">{match.row}</td><td className="p-2">{match.matricValue || '—'}</td><td className="p-2">{match.studentValue || '—'}</td><td className="p-2">{match.programmeValue || '—'}</td><td className="p-2">{match.student?.name ?? 'Not found'}</td><td className="p-2">{match.mentorValue || '—'}</td><td className="p-2">{match.mentor?.name ?? 'Not found'}</td><td className="p-2">{Math.round(match.confidence * 100)}%</td>
+                          <td className="p-2">{match.row}</td><td className="p-2">{match.matricValue || '—'}</td><td className="p-2">{match.student?.name ?? 'Not found — existing student required'}</td><td className="p-2">{match.mentorValue || '—'}</td><td className="p-2">{match.mentor?.name ?? 'Not found'}</td><td className="p-2">{Math.round(match.confidence * 100)}%</td>
                       </tr>
                     ))}
                   </tbody>
@@ -325,6 +317,17 @@ export default function AssignmentPage() {
               <button type="button" disabled={importAssignments.isPending || !importMatches.some((match) => match.student && match.mentor && match.confidence >= 0.55)} onClick={() => importAssignments.mutate()} className="rounded bg-ums-blue px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
                 {importAssignments.isPending ? 'Assigning…' : `Apply ${importMatches.filter((match) => match.student && match.mentor && match.confidence >= 0.55).length} detected assignments`}
               </button>
+              {importAssignments.isPending && (
+                <div className="rounded border border-blue-100 bg-white p-3 text-xs text-blue-900">
+                  <div className="mb-2 flex justify-between">
+                    <span>Assigning existing students</span>
+                    <span>{assignmentProgress.current} / {assignmentProgress.total} · {assignmentProgress.failed} failed</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-blue-100">
+                    <div className="h-full rounded-full bg-ums-blue transition-all" style={{ width: `${assignmentProgress.total ? (assignmentProgress.current / assignmentProgress.total) * 100 : 0}%` }} />
+                  </div>
+                </div>
+              )}
               {importMatches.length > 100 && <p className="text-xs text-blue-800">Showing the first 100 rows. All valid rows will be applied.</p>}
             </div>
           )}

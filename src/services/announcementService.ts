@@ -64,6 +64,12 @@ export async function deleteAnnouncement(id: string) {
   if (error) throw error
 }
 
+export async function clearAllAnnouncements() {
+  const { data, error } = await supabase.rpc('clear_all_announcements')
+  if (error) throw error
+  return data ?? 0
+}
+
 export async function updateAnnouncement(id: string, patch: Database['public']['Tables']['announcements']['Update']): Promise<Announcement> {
   const { data, error } = await supabase.from('announcements').update(patch).eq('id', id).select().single()
   if (error) throw error

@@ -49,6 +49,12 @@ export async function deleteTask(id: string) {
   if (error) throw error
 }
 
+export async function clearAllTasks() {
+  const { data, error } = await supabase.rpc('clear_all_tasks')
+  if (error) throw error
+  return data ?? 0
+}
+
 export async function listSubmissionsForTask(taskId: string): Promise<Submission[]> {
   const { data, error } = await supabase
     .from('task_submissions')

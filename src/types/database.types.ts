@@ -502,6 +502,14 @@ export interface Database {
         }
         Returns: undefined
       }
+      clear_all_tasks: {
+        Args: Record<string, never>
+        Returns: number
+      }
+      clear_all_announcements: {
+        Args: Record<string, never>
+        Returns: number
+      }
     }
     Enums: {
       user_role: UserRole
