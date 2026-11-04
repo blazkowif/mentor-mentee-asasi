@@ -29,6 +29,11 @@ type UserPayload = {
   job_title?: string | null
   grade?: string | null
   ums_per?: string | null
+  study_status_smp?: string | null
+  lecture_group?: string | null
+  residence_college?: string | null
+  room_number?: string | null
+  bka_status?: string | null
 }
 
 Deno.serve(async (request) => {
@@ -77,19 +82,32 @@ Deno.serve(async (request) => {
       if (error) throw error
       return json({ ok: true })
     }
-    if (!user?.name || !user.role) {
+    let existingProfile: Record<string, unknown> | null = null
+    if (action === 'update') {
+      if (!user?.id) throw new Error('User id is required.')
+      const { data, error } = await admin
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+      if (error) throw error
+      existingProfile = data
+    }
+    const effectiveName = user?.name || String(existingProfile?.name ?? '')
+    const effectiveRole = (user?.role ?? existingProfile?.role) as UserPayload['role'] | undefined
+    const effectiveEmail = user?.email || String(existingProfile?.email ?? '')
+    const effectiveMatric = user?.matric_number || String(existingProfile?.matric_number ?? '')
+
+    if (!effectiveName || !effectiveRole) {
       throw new Error('Name and role are required.')
     }
-    if (user.role === 'student' && !user.matric_number) {
-      throw new Error('Student matric number is required.')
-    }
-    if (user.role !== 'student' && !user.email) {
+    if (effectiveRole !== 'student' && !effectiveEmail) {
       throw new Error('Email is required for staff accounts.')
     }
-    if (user.role !== 'student' && user.mentor_id) throw new Error('Only student accounts can have a mentor.')
-    const authEmail = user.role === 'student' && user.matric_number
-      ? studentAuthEmail(user.matric_number)
-      : user.email!
+    if (effectiveRole !== 'student' && user.mentor_id) throw new Error('Only student accounts can have a mentor.')
+    const authEmail = effectiveRole === 'student'
+      ? effectiveMatric ? studentAuthEmail(effectiveMatric) : (effectiveEmail || `pending-${crypto.randomUUID()}@student.local`)
+      : effectiveEmail
     let id = user.id
     if (action === 'create') {
       if (!user.password || user.password.length < 8) throw new Error('Password must contain at least 8 characters.')
@@ -128,14 +146,13 @@ Deno.serve(async (request) => {
       job_title: user.job_title,
       grade: user.grade,
       ums_per: user.ums_per,
+      study_status_smp: user.study_status_smp,
+      lecture_group: user.lecture_group,
+      residence_college: user.residence_college,
+      room_number: user.room_number,
+      bka_status: user.bka_status,
     }
     if (action === 'update') {
-      const { data: existingProfile, error: existingProfileError } = await admin
-        .from('users')
-        .select('*')
-        .eq('id', id)
-        .single()
-      if (existingProfileError) throw existingProfileError
       profilePayload = {
         ...existingProfile,
         ...Object.fromEntries(
@@ -144,7 +161,7 @@ Deno.serve(async (request) => {
       }
     }
     const { data: profile, error: profileError } = await admin.from('users').upsert(profilePayload)
-      .select('id, role, matric_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, channel, motto, job_title, grade, ums_per, created_at').single()
+      .select('id, role, matric_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, study_status_smp, lecture_group, residence_college, room_number, bka_status, channel, motto, job_title, grade, ums_per, created_at').single()
     if (profileError) throw profileError
     return json({ user: profile })
   } catch (error) {

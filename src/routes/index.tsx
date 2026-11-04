@@ -13,12 +13,14 @@ import AdminSearchPage from '@/features/admin/AdminSearchPage'
 import UserDetailPage from '@/features/admin/UserDetailPage'
 import AdminControlPage from '@/features/admin/AdminControlPage'
 import MentorNotesPage from '@/features/mentorNotes/MentorNotesPage'
+import PublicMeetingReportPage from '@/features/meetings/PublicMeetingReportPage'
 
 export default function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<AuthPage />} />
       <Route path="/staff-login" element={<AuthPage />} />
+      <Route path="/meeting-report/:token" element={<PublicMeetingReportPage />} />
 
       {/* Any authenticated role */}
       <Route element={<ProtectedRoute />}>

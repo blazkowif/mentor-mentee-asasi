@@ -107,6 +107,13 @@ Administrator capabilities include:
 
 Mentor notes are stored separately from chat, tasks, and student-visible
 meeting records. Only the note's mentor and administrators can read them.
+
+Meeting reporting: administrators create a meeting task and assign it to a
+mentor. The assignment adds all students currently assigned to that mentor and
+sends the mentor an automated chat message listing those students. Mentors use
+the Meeting report panel to enter one overall meeting summary, student comments,
+and special-attention flags. Each meeting also has a token-based public report
+link at `/meeting-report/<token>` so the form can be opened without signing in.
 An attention remark includes a severity and reason, and creates an in-app
 notification for every administrator. Students have no database policy that
 allows them to read notes, flags, or administrator follow-up records.

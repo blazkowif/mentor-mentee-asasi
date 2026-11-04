@@ -19,6 +19,7 @@ type ImportField =
   | 'matric_number' | 'ic_number' | 'name' | 'email' | 'gender' | 'religion' | 'race'
   | 'phone' | 'programme' | 'channel' | 'address' | 'postcode' | 'city' | 'state'
   | 'study_status' | 'mentor' | 'job_title' | 'grade' | 'ums_per'
+  | 'study_status_smp' | 'lecture_group' | 'residence_college' | 'room_number' | 'bka_status'
 type UserForm = {
   name: string
   role: Role
@@ -75,6 +76,7 @@ const emptyForm: UserForm = {
 const importFields: ImportField[] = [
   'matric_number', 'ic_number', 'name', 'email', 'gender', 'religion', 'race', 'phone',
   'programme', 'channel', 'address', 'postcode', 'city', 'state', 'study_status', 'mentor',
+  'study_status_smp', 'lecture_group', 'residence_college', 'room_number', 'bka_status',
 ]
 const mentorImportFields: ImportField[] = ['name', 'job_title', 'grade', 'ums_per', 'email']
 const DELETE_STUDENTS_PHRASE = 'I-hereby-ending-this-session'
@@ -117,6 +119,7 @@ export default function AdminControlPage() {
   const unassignedStudentCount = users.filter((user) => user.role === 'student' && !user.mentor_id).length
   const students = users.filter((user) => user.role === 'student')
   const mentors = users.filter((user) => user.role === 'lecturer')
+  const staff = users.filter((user) => user.role !== 'student')
   const mentees = students.filter((student) => student.mentor_id)
   const filteredUsers = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -282,7 +285,7 @@ export default function AdminControlPage() {
         ))}
       </nav>
       {message && <p className="rounded bg-green-50 px-3 py-2 text-sm text-green-700">{message}</p>}
-      {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="whitespace-pre-line rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {usersQuery.isError && (
         <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">
           Could not load users: {usersQuery.error instanceof Error ? usersQuery.error.message : 'Supabase returned an unknown error.'}
@@ -481,7 +484,7 @@ export default function AdminControlPage() {
 
       {tab === 'import' && <SpreadsheetImport onComplete={() => queryClient.invalidateQueries({ queryKey: queryKeys.users.all() })} onMessage={setMessage} onError={setError} />}
       {tab === 'assignment' && <AssignmentPage />}
-      {tab === 'lists' && !usersQuery.isError && <ExportSection mentees={mentees} mentors={mentors} />}
+      {tab === 'lists' && !usersQuery.isError && <ExportSection students={students} mentees={mentees} mentors={mentors} staff={staff} />}
       {tab === 'content' && <ContentManager users={users} tasks={tasksQuery.data ?? []} announcements={announcementsQuery.data ?? []} adminId={currentUser?.id ?? ''} onMessage={setMessage} onError={setError} />}
       {tab === 'meetings' && <MeetingSummary />}
     </div>
@@ -498,13 +501,17 @@ function StatisticCard({ label, value, warning = false }: { label: string; value
 }
 
 function ExportSection({
+  students,
   mentees,
   mentors,
+  staff,
 }: {
+  students: adminService.UserRow[]
   mentees: adminService.UserRow[]
   mentors: adminService.UserRow[]
+  staff: adminService.UserRow[]
 }) {
-  const [view, setView] = useState<'mentees' | 'mentors' | 'groups'>('mentees')
+  const [view, setView] = useState<'students' | 'staff' | 'mentees' | 'groups'>('students')
   const notesQuery = useQuery({
     queryKey: ['admin', 'mentor-notes', 'all'],
     queryFn: () => mentorNotesService.listMentorNotes(),
@@ -583,7 +590,62 @@ function ExportSection({
           }]
     })
 
+  const studentRows = students
+    .slice()
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((student) => ({
+      'NO. MATRIK': student.matric_number ?? '',
+      'NO. KAD PENGENALAN': student.ic_number ?? '',
+      'NAMA PELAJAR': student.name,
+      JANTINA: student.gender ?? '',
+      AGAMA: student.religion ?? '',
+      KAUM: student.race ?? '',
+      'NO. TELEFON (WHATSAPP)': student.phone ?? '',
+      'PROGRAM ASASI': student.programme ?? '',
+      'STATUS PENGAJIAN': student.study_status ?? '',
+      'STATUS SMP': student.study_status_smp ?? '',
+      'KUMPULAN KULIAH': student.lecture_group ?? '',
+      'KOLEJ KEDIAMAN': student.residence_college ?? '',
+      'NO. BILIK': student.room_number ?? '',
+      'NAMA MENTOR': mentors.find((mentor) => mentor.id === student.mentor_id)?.name ?? '',
+      'STATUS BKA': student.bka_status ?? '',
+      'ALAMAT RUMAH': student.address ?? '',
+      POSKOD: student.postcode ?? '',
+      BANDAR: student.city ?? '',
+      NEGERI: student.state ?? '',
+    }))
+
+  const staffRows = staff
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((staff) => ({
+      Name: staff.name,
+      Role: staff.role === 'lecturer' ? 'Mentor' : 'Administrator',
+      Email: staff.email ?? '',
+      'Staff ID': staff.matric_number ?? '',
+      Phone: staff.phone ?? '',
+      Gender: staff.gender ?? '',
+      Address: staff.address ?? '',
+      Postcode: staff.postcode ?? '',
+      City: staff.city ?? '',
+      State: staff.state ?? '',
+      'Job title': staff.job_title ?? '',
+      Grade: staff.grade ?? '',
+      'UMS Per': staff.ums_per ?? '',
+    }))
+
   const viewConfig = {
+    students: {
+      label: 'All students',
+      rows: studentRows,
+      filename: 'students-full-data.xlsx',
+      sheetName: 'Students',
+    },
+    staff: {
+      label: 'Mentors & administrators',
+      rows: staffRows,
+      filename: 'mentors-and-administrators.xlsx',
+      sheetName: 'Staff',
+    },
     mentees: {
       label: 'Mentees',
       rows: menteeRows,
@@ -618,6 +680,7 @@ function ExportSection({
         <div>
         <h2 className="font-semibold text-gray-900">Download lists</h2>
         <p className="text-sm text-gray-500">Choose a list to view, then download the current list.</p>
+        <p className="text-xs text-gray-400">All students exports the same column names as your source spreadsheet, ready to edit and re-import.</p>
         <p className="text-xs text-gray-400">The mentee export includes the latest private note and active attention remark.</p>
         </div>
         <button
@@ -630,6 +693,8 @@ function ExportSection({
       </div>
       <div className="mb-4 flex flex-wrap gap-2 border-b border-gray-100 pb-3">
         {([
+          ['students', `All students (${students.length})`],
+          ['staff', `Mentors & administrators (${staffRows.length})`],
           ['mentees', `Mentees (${mentees.length})`],
           ['mentors', `Mentors (${mentors.length})`],
           ['groups', 'Mentor & Mentee'],
@@ -782,29 +847,40 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
       setRows(records.map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value)]))))
       const defaultMapping: Partial<Record<ImportField, string>> = {}
       const aliases: Partial<Record<ImportField, string[]>> = {
-        matric_number: ['nomatrik', 'no matrik', 'matric number'],
-        ic_number: ['kp', 'kad pengenalan', 'ic number'],
-        name: ['nama', 'name'],
+        matric_number: ['no matrik', 'nomatrik', 'matric number'],
+        ic_number: ['no kad pengenalan', 'kad pengenalan', 'kp', 'ic number'],
+        name: ['nama pelajar', 'nama', 'name'],
         email: ['email', 'e-mel', 'emel', 'staff email'],
         gender: ['jantina', 'gender'],
-        religion: ['agamabm', 'agama', 'religion'],
-        race: ['kaumbm', 'kaum', 'race'],
-        phone: ['notelbimbit', 'no telefon', 'phone'],
-        programme: ['nama program', 'program', 'programme'],
+        religion: ['agama', 'agama bm', 'religion'],
+        race: ['kaum', 'kaum bm', 'race'],
+        phone: ['no telefon whatsapp', 'no telefon', 'notelbimbit', 'phone'],
+        programme: ['program asasi', 'nama program', 'program', 'programme'],
         channel: ['saluran', 'channel'],
-        address: ['alamat', 'address'],
+        address: ['alamat rumah', 'alamat', 'address'],
         postcode: ['poskod', 'postcode'],
         city: ['bandar', 'city'],
         state: ['negeri', 'state'],
         study_status: ['status pengajian', 'study status'],
-        mentor: ['mentor'],
+        study_status_smp: ['status smp'],
+        lecture_group: ['kumpulan kuliah'],
+        residence_college: ['kolej kediaman'],
+        room_number: ['no bilik'],
+        mentor: ['nama mentor', 'mentor'],
+        bka_status: ['status bka'],
         job_title: ['jawatan', 'job title', 'position'],
         grade: ['gred', 'grade'],
         ums_per: ['ums per', 'ums_per', 'ums perkhidmatan', 'per'],
       }
+      const normalizeHeader = (value: string) => value
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
       for (const field of [...importFields, ...mentorImportFields]) {
         const accepted = aliases[field] ?? [field]
-        const header = nextHeaders.find((value) => accepted.includes(value.trim().toLowerCase()))
+        const normalizedAccepted = accepted.map(normalizeHeader)
+        const header = nextHeaders.find((value) => normalizedAccepted.includes(normalizeHeader(value)))
         if (header) defaultMapping[field] = header
       }
       setMapping(defaultMapping)
@@ -819,9 +895,9 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
     const nameColumn = mapping.name
     const matricColumn = mapping.matric_number
     const emailColumn = mapping.email
-    if (!nameColumn || (importRole === 'student' && !matricColumn) || (importRole !== 'student' && !emailColumn)) {
+    if (!nameColumn || (importRole !== 'student' && !emailColumn)) {
       onError(importRole === 'student'
-        ? 'Map both Nomatrik and Nama before importing students.'
+        ? 'Map Nama before importing students. Nomatrik is optional.'
         : 'Map Nama and Email before importing mentors.')
       return
     }
@@ -850,14 +926,14 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
           const name = row[nameColumn]?.trim()
           const matricNumber = matricColumn ? row[matricColumn]?.trim() : ''
           const email = importRole === 'student'
-            ? studentAuthEmail(matricNumber)
+            ? matricNumber ? studentAuthEmail(matricNumber) : `pending-${index + 2}-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}@student.local`
             : row[emailColumn!]?.trim()
           const password = passwordMode === 'column'
             ? row[passwordColumn]?.trim() || defaultPassword.trim()
             : defaultPassword.trim()
-          if (!name || (importRole === 'student' && !matricNumber) || !email || !password) {
+          if (!name || !email || !password) {
             throw new Error(importRole === 'student'
-              ? 'Nomatrik, Nama, and the selected password value are required.'
+              ? 'Nama and the selected password value are required.'
               : 'Nama, Email, and the selected password value are required.')
           }
           if (password.length < 8) {
@@ -890,6 +966,11 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
             city: mapping.city ? row[mapping.city] || undefined : undefined,
             state: mapping.state ? row[mapping.state] || undefined : undefined,
             study_status: mapping.study_status ? row[mapping.study_status] || undefined : undefined,
+            study_status_smp: mapping.study_status_smp ? row[mapping.study_status_smp] || undefined : undefined,
+            lecture_group: mapping.lecture_group ? row[mapping.lecture_group] || undefined : undefined,
+            residence_college: mapping.residence_college ? row[mapping.residence_college] || undefined : undefined,
+            room_number: mapping.room_number ? row[mapping.room_number] || undefined : undefined,
+            bka_status: mapping.bka_status ? row[mapping.bka_status] || undefined : undefined,
             channel: mapping.channel ? row[mapping.channel] || undefined : undefined,
             job_title: mapping.job_title ? row[mapping.job_title] || undefined : undefined,
             grade: mapping.grade ? row[mapping.grade] || undefined : undefined,
@@ -924,9 +1005,13 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
     }
   }
 
-  return <section className="max-w-3xl rounded-lg bg-white p-5 shadow-sm">
+  const missingStudentFields = (row: Record<string, string>) => importRole === 'student'
+    ? ['matric_number', 'ic_number', 'phone'].filter((field) => !mapping[field as ImportField] || !row[mapping[field as ImportField]!]?.trim())
+    : []
+
+  return <section className="max-w-4xl rounded-lg bg-white p-5 shadow-sm">
     <h2 className="font-semibold">Import students or mentors from Excel</h2>
-    <p className="mb-4 text-sm text-gray-500">Upload a spreadsheet, choose the account type, confirm the detected columns, and edit any mapping that is incorrect. Student login emails are generated from Nomatrik. Mentor imports use only Nama, Jawatan, Gred, UMS Per, and Email; the chosen password is used for every imported mentor.</p>
+    <p className="mb-4 text-sm text-gray-500">Upload a spreadsheet, choose the account type, confirm the detected columns, and edit any mapping that is incorrect. Student Nomatrik, KP, and phone are optional; missing values are marked as warnings and can be completed later from the profile. Mentor imports use Nama, Jawatan, Gred, UMS Per, and Email.</p>
     <div className="mb-4 flex gap-2 border-b border-gray-200 pb-3">
       <button type="button" onClick={() => setImportMode('excel')} className={`rounded px-3 py-2 text-sm font-medium ${importMode === 'excel' ? 'bg-ums-blue text-white' : 'bg-gray-100 text-gray-700'}`}>
         Import Excel
@@ -1018,7 +1103,7 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
         <div className="grid gap-2 sm:grid-cols-2">
           {(importRole === 'lecturer' ? mentorImportFields : importFields).map((field) => (
             <label key={field} className="text-sm">
-              <span className="mb-1 block text-xs font-medium text-gray-600">{fieldLabel(field)}{((importRole === 'student' && field === 'matric_number') || (importRole === 'lecturer' && ['name', 'job_title', 'grade', 'ums_per', 'email'].includes(field)) || field === 'name') && <span className="text-red-600"> *</span>}</span>
+              <span className="mb-1 block text-xs font-medium text-gray-600">{fieldLabel(field)}{((importRole === 'lecturer' && ['name', 'job_title', 'grade', 'ums_per', 'email'].includes(field)) || field === 'name') && <span className="text-red-600"> *</span>}</span>
               <select className="w-full rounded border px-2 py-1.5" value={mapping[field] ?? ''} onChange={(event) => setMapping((previous) => ({ ...previous, [field]: event.target.value || undefined }))}>
                 <option value="">Do not import</option>
                 {headers.map((header) => <option key={header} value={header}>{header}</option>)}
@@ -1029,9 +1114,9 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
       </div>
       <div className="max-h-96 overflow-auto rounded border border-gray-200">
         <table className="w-full min-w-[620px] text-left text-xs">
-          <thead className="sticky top-0 bg-gray-50 text-gray-500"><tr><th className="p-2">Row</th><th className="p-2">{importRole === 'lecturer' ? 'UMS PER' : 'NoMatrik'}</th><th className="p-2">Nama</th><th className="p-2">{importRole === 'lecturer' ? 'Jawatan' : 'Programme'}</th><th className="p-2">Password</th></tr></thead>
+          <thead className="sticky top-0 bg-gray-50 text-gray-500"><tr><th className="p-2">Row</th><th className="p-2">{importRole === 'lecturer' ? 'UMS PER' : 'NoMatrik'}</th><th className="p-2">Nama</th><th className="p-2">{importRole === 'lecturer' ? 'Jawatan' : 'Programme'}</th><th className="p-2">Password</th><th className="p-2">Student warnings</th></tr></thead>
           <tbody className="divide-y">
-            {rows.map((row, index) => <tr key={index}><td className="p-2">{index + 2}</td><td className="p-2">{importRole === 'lecturer' ? (mapping.ums_per ? row[mapping.ums_per] : '—') : (mapping.matric_number ? row[mapping.matric_number] : '—')}</td><td className="p-2">{mapping.name ? row[mapping.name] : '—'}</td><td className="p-2">{importRole === 'lecturer' ? (mapping.job_title ? row[mapping.job_title] : '—') : (mapping.programme ? row[mapping.programme] : '—')}</td><td className="p-2">{passwordMode === 'column' && passwordColumn ? (row[passwordColumn] ? 'Ready' : defaultPassword ? 'Fallback' : 'Missing') : defaultPassword ? 'Manual' : 'Missing'}</td></tr>)}
+            {rows.map((row, index) => <tr key={index}><td className="p-2">{index + 2}</td><td className="p-2">{importRole === 'lecturer' ? (mapping.ums_per ? row[mapping.ums_per] : '—') : (mapping.matric_number ? row[mapping.matric_number] : '—')}</td><td className="p-2">{mapping.name ? row[mapping.name] : '—'}</td><td className="p-2">{importRole === 'lecturer' ? (mapping.job_title ? row[mapping.job_title] : '—') : (mapping.programme ? row[mapping.programme] : '—')}</td><td className="p-2">{passwordMode === 'column' && passwordColumn ? (row[passwordColumn] ? 'Ready' : defaultPassword ? 'Fallback' : 'Missing') : defaultPassword ? 'Manual' : 'Missing'}</td><td className="p-2 text-xs">{missingStudentFields(row).length ? <span className="font-medium text-amber-700">Missing: {missingStudentFields(row).map(fieldLabel).join(', ')}</span> : <span className="text-green-700">Complete</span>}</td></tr>)}
           </tbody>
         </table>
       </div>
@@ -1071,6 +1156,11 @@ function fieldLabel(field: ImportField) {
     city: 'Bandar',
     state: 'Negeri',
     study_status: 'Study status',
+    study_status_smp: 'Status SMP',
+    lecture_group: 'Kumpulan kuliah',
+    residence_college: 'Kolej kediaman',
+    room_number: 'No. bilik',
+    bka_status: 'Status BKA',
     mentor: 'Mentor',
     job_title: 'Jawatan',
     grade: 'Gred',

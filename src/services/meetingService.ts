@@ -4,6 +4,7 @@ import type { Database } from '@/types/database.types'
 export type MeetingTask = Database['public']['Tables']['meeting_tasks']['Row']
 export type MeetingAssignment = Database['public']['Tables']['meeting_assignments']['Row']
 export type MeetingReport = Database['public']['Tables']['meeting_reports']['Row']
+export type PublicMeetingReport = Database['public']['Functions']['get_public_meeting_report']['Returns'][number]
 
 export async function listMeetingTasks(): Promise<MeetingTask[]> {
   const { data, error } = await supabase
@@ -86,4 +87,39 @@ export async function saveReport(params: {
     .single()
   if (error) throw error
   return data
+}
+
+export async function assignMeetingToMentor(meetingTaskId: string, mentorId: string) {
+  const { data, error } = await supabase.rpc('assign_meeting_to_mentor', {
+    p_meeting_task_id: meetingTaskId,
+    p_mentor_id: mentorId,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function getPublicMeetingReport(reportToken: string): Promise<PublicMeetingReport[]> {
+  const { data, error } = await supabase.rpc('get_public_meeting_report', {
+    p_report_token: reportToken,
+  })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function savePublicMeetingReport(params: {
+  reportToken: string
+  overallSummary: string
+  studentReports: Array<{
+    assignment_id: string
+    student_comment: string
+    needs_attention: boolean
+    attention_remark: string | null
+  }>
+}) {
+  const { error } = await supabase.rpc('save_public_meeting_report', {
+    p_report_token: params.reportToken,
+    p_overall_summary: params.overallSummary,
+    p_student_reports: params.studentReports,
+  })
+  if (error) throw error
 }

@@ -106,6 +106,23 @@ export default function MentorNotesPage() {
           {showForm ? 'Close note form' : '+ Add new note'}
         </button>
       </div>
+      <section className="mb-6 rounded-lg bg-white p-4 shadow-sm">
+        <h2 className="font-semibold text-gray-900">Mentee student table</h2>
+        <p className="mb-3 text-xs text-gray-500">Student information imported by administrators. Only your assigned mentees are shown.</p>
+        <div className="overflow-x-auto">
+          <table className="min-w-[1800px] text-left text-xs">
+            <thead className="border-b text-gray-500">
+              <tr>{['NO. MATRIK', 'NO. KAD PENGENALAN', 'NAMA PELAJAR', 'JANTINA', 'AGAMA', 'KAUM', 'NO. TELEFON (WHATSAPP)', 'PROGRAM ASASI', 'STATUS PENGAJIAN', 'STATUS SMP', 'KUMPULAN KULIAH', 'KOLEJ KEDIAMAN', 'NO. BILIK', 'NAMA MENTOR', 'STATUS BKA', 'ALAMAT RUMAH', 'POSKOD', 'BANDAR', 'NEGERI'].map((heading) => <th key={heading} className="whitespace-nowrap p-2">{heading}</th>)}</tr>
+            </thead>
+            <tbody className="divide-y">
+              {mentees.map((mentee) => <tr key={mentee.id}>
+                {[mentee.matric_number, mentee.ic_number, mentee.name, mentee.gender, mentee.religion, mentee.race, mentee.phone, mentee.programme, mentee.study_status, mentee.study_status_smp, mentee.lecture_group, mentee.residence_college, mentee.room_number, user?.name, mentee.bka_status, mentee.address, mentee.postcode, mentee.city, mentee.state].map((value, index) => <td key={index} className={`whitespace-nowrap p-2 ${!value && index !== 2 ? 'text-amber-700' : 'text-gray-700'}`}>{value || 'Missing'}</td>)}
+              </tr>)}
+            </tbody>
+          </table>
+          {mentees.length === 0 && <p className="py-4 text-sm text-gray-500">No mentees assigned.</p>}
+        </div>
+      </section>
       {showForm && <form onSubmit={handleSubmit} className="rounded-lg bg-white p-4 shadow-sm">
         <label className="mb-1 block text-sm font-medium text-gray-700">Mentee</label>
         <select value={studentId} onChange={(e) => setStudentId(e.target.value)} className="mb-3 w-full rounded border border-gray-200 px-3 py-2 text-sm" required>
@@ -121,6 +138,13 @@ export default function MentorNotesPage() {
               <p className="font-medium text-gray-900">{selectedMentee.name}</p>
               <p className="text-xs text-gray-600">{selectedMentee.matric_number || 'No matric number'} · {selectedMentee.programme || 'Programme not set'}</p>
               <p className="mt-1 text-xs text-gray-500">{selectedMentee.email || 'No email recorded'} · {selectedMentee.phone || 'No phone recorded'}</p>
+              <p className="mt-1 text-xs text-gray-500">{selectedMentee.lecture_group || 'No lecture group'} · {selectedMentee.residence_college || 'No residence recorded'}{selectedMentee.room_number ? ` · Room ${selectedMentee.room_number}` : ''}</p>
+              <p className="mt-1 text-xs text-gray-500">{selectedMentee.gender || 'No gender'} · {selectedMentee.religion || 'No religion'} · {selectedMentee.race || 'No race'}</p>
+              <p className="mt-1 text-xs text-gray-500">{[selectedMentee.address, selectedMentee.postcode, selectedMentee.city, selectedMentee.state].filter(Boolean).join(', ') || 'No address recorded'}</p>
+              <p className={`mt-1 text-xs ${!selectedMentee.matric_number || !selectedMentee.ic_number || !selectedMentee.phone ? 'font-medium text-amber-700' : 'text-gray-500'}`}>
+                IC: {selectedMentee.ic_number || 'Missing'}
+                {(!selectedMentee.matric_number || !selectedMentee.ic_number || !selectedMentee.phone) && ' · Profile information is incomplete'}
+              </p>
             </div>
           )
         })()}

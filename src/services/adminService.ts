@@ -28,9 +28,14 @@ export type UserInput = {
   job_title?: string | null
   grade?: string | null
   ums_per?: string | null
+  study_status_smp?: string | null
+  lecture_group?: string | null
+  residence_college?: string | null
+  room_number?: string | null
+  bka_status?: string | null
 }
 export type AuthUserAction = 'create' | 'update' | 'delete' | 'delete_all_students' | 'delete_all_mentors'
-const SAFE_USER_FIELDS = 'id, role, matric_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, channel, motto, job_title, grade, ums_per, created_at'
+const SAFE_USER_FIELDS = 'id, role, matric_number, ic_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, study_status_smp, lecture_group, residence_college, room_number, bka_status, channel, motto, job_title, grade, ums_per, created_at'
 const LEGACY_USER_FIELDS = 'id, role, matric_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, channel, motto, created_at'
 
 type UserQueryResult = {

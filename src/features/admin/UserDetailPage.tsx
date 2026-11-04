@@ -158,15 +158,60 @@ export default function UserDetailPage() {
                 <dd className="text-gray-900">{user.matric_number ?? '—'}</dd>
               </div>
               <div>
+                <dt className="text-gray-400">IC / Kad Pengenalan</dt>
+                <dd className="text-gray-900">{user.ic_number ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-400">Phone</dt>
+                <dd className="text-gray-900">{user.phone ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-400">Gender · Religion · Race</dt>
+                <dd className="text-gray-900">{user.gender ?? '—'} · {user.religion ?? '—'} · {user.race ?? '—'}</dd>
+              </div>
+              <div>
                 <dt className="text-gray-400">Programme</dt>
                 <dd className="text-gray-900">{user.programme ?? '—'}</dd>
               </div>
+              <div>
+                <dt className="text-gray-400">Study status</dt>
+                <dd className="text-gray-900">{user.study_status ?? '—'}{user.study_status_smp ? ` · SMP: ${user.study_status_smp}` : ''}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-400">Address</dt>
+                <dd className="text-gray-900">{[user.address, user.postcode, user.city, user.state].filter(Boolean).join(', ') || '—'}</dd>
+              </div>
+              {isStudent && (
+                <>
+                  <div>
+                    <dt className="text-gray-400">Lecture group</dt>
+                    <dd className="text-gray-900">{user.lecture_group ?? '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-400">Residence / room</dt>
+                    <dd className="text-gray-900">{user.residence_college ?? '—'}{user.room_number ? ` · Room ${user.room_number}` : ''}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-400">BKA status</dt>
+                    <dd className="text-gray-900">{user.bka_status ?? '—'}</dd>
+                  </div>
+                </>
+              )}
               <div>
                 <dt className="text-gray-400">Joined</dt>
                 <dd className="text-gray-900">
                   {user.created_at ? format(new Date(user.created_at), 'PPpp') : '—'}
                 </dd>
               </div>
+              {isStudent && (!user.matric_number || !user.ic_number || !user.phone) && (
+                <p className="rounded bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                  Profile warning: missing {[
+                    !user.matric_number && 'matric number',
+                    !user.ic_number && 'IC number',
+                    !user.phone && 'phone number',
+                  ].filter(Boolean).join(', ')}.
+                </p>
+              )}
             </dl>
           </div>
 

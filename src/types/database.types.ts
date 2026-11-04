@@ -33,6 +33,11 @@ export interface Database {
     city: string | null
     state: string | null
     study_status: string | null
+    study_status_smp: string | null
+    lecture_group: string | null
+    residence_college: string | null
+    room_number: string | null
+    bka_status: string | null
     channel: string | null
     profile_image: string | null
     motto: string | null
@@ -326,6 +331,7 @@ export interface Database {
           instructions: string | null
           scheduled_start: string | null
           scheduled_end: string | null
+          report_token: string
           created_at: string
         }
         Insert: Partial<Database['public']['Tables']['meeting_tasks']['Row']> & {
@@ -359,6 +365,7 @@ export interface Database {
           mentor_id: string
           student_id: string
           overall_summary: string
+          student_comment: string
           needs_attention: boolean
           attention_remark: string | null
           completed_at: string
@@ -457,6 +464,43 @@ export interface Database {
           p_attachment?: string | null
         }
         Returns: Database['public']['Tables']['messages']['Row']
+      }
+      assign_meeting_to_mentor: {
+        Args: { p_meeting_task_id: string; p_mentor_id: string }
+        Returns: number
+      }
+      get_public_meeting_report: {
+        Args: { p_report_token: string }
+        Returns: Array<{
+          meeting_task_id: string
+          meeting_number: number
+          title: string
+          instructions: string | null
+          scheduled_start: string | null
+          scheduled_end: string | null
+          mentor_id: string
+          mentor_name: string
+          assignment_id: string
+          student_id: string
+          student_name: string
+          overall_summary: string
+          student_comment: string
+          needs_attention: boolean
+          attention_remark: string | null
+        }>
+      }
+      save_public_meeting_report: {
+        Args: {
+          p_report_token: string
+          p_overall_summary: string
+          p_student_reports: Array<{
+            assignment_id: string
+            student_comment: string
+            needs_attention: boolean
+            attention_remark: string | null
+          }>
+        }
+        Returns: undefined
       }
     }
     Enums: {

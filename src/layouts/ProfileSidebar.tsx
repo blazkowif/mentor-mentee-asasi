@@ -110,7 +110,7 @@ export default function ProfileSidebar() {
             <p className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Main menu</p>
             <NavItem to={user.role === 'admin' ? '/admin/control' : '/dashboard'} label={user.role === 'admin' ? 'Admin Dashboard' : 'Dashboard'} />
             <NavItem to="/chat" label="Chat" unreadCount={unreadChatCount} />
-            <NavItem to="/tasks" label="Tasks" />
+            <NavItem to="/tasks" label={user.role === 'lecturer' ? 'Meeting report' : 'Tasks'} />
             {user.role === 'lecturer' && <NavItem to="/mentor-notes" label="Private notes" />}
             <NavItem to="/announcements" label="Announcements" />
             <NavItem to="/notifications" label="Notifications" />
