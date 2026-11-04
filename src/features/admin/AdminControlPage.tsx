@@ -511,7 +511,7 @@ function ExportSection({
   mentors: adminService.UserRow[]
   staff: adminService.UserRow[]
 }) {
-  const [view, setView] = useState<'students' | 'staff' | 'mentees' | 'groups'>('students')
+  const [view, setView] = useState<'students' | 'staff' | 'mentees' | 'mentors' | 'groups'>('students')
   const notesQuery = useQuery({
     queryKey: ['admin', 'mentor-notes', 'all'],
     queryFn: () => mentorNotesService.listMentorNotes(),
@@ -841,10 +841,16 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
     try {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
-      const nextHeaders = records.length ? Object.keys(records[0]) : []
+      if (!sheet) throw new Error('The workbook does not contain a readable worksheet.')
+      const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', raw: false })
+      const nextHeaders = records.length
+        ? Object.keys(records[0]).map((header) => header.trim())
+        : []
+      if (!nextHeaders.length) throw new Error('The selected worksheet is empty or has no header row.')
       setHeaders(nextHeaders)
-      setRows(records.map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value)]))))
+      setRows(records.map((row) => Object.fromEntries(
+        Object.entries(row).map(([key, value]) => [key.trim(), String(value).trim()]),
+      )))
       const defaultMapping: Partial<Record<ImportField, string>> = {}
       const aliases: Partial<Record<ImportField, string[]>> = {
         matric_number: ['no matrik', 'nomatrik', 'matric number'],
@@ -1005,8 +1011,8 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
     }
   }
 
-  const missingStudentFields = (row: Record<string, string>) => importRole === 'student'
-    ? ['matric_number', 'ic_number', 'phone'].filter((field) => !mapping[field as ImportField] || !row[mapping[field as ImportField]!]?.trim())
+  const missingStudentFields = (row: Record<string, string>): ImportField[] => importRole === 'student'
+    ? (['matric_number', 'ic_number', 'phone'] as ImportField[]).filter((field) => !mapping[field] || !row[mapping[field]!]?.trim())
     : []
 
   return <section className="max-w-4xl rounded-lg bg-white p-5 shadow-sm">

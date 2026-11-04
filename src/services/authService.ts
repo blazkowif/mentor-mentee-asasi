@@ -1,5 +1,7 @@
 import { supabase } from '@/lib/supabase'
 
+const SAFE_USER_FIELDS = 'id, role, matric_number, ic_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, study_status_smp, lecture_group, residence_college, room_number, bka_status, channel, motto, job_title, grade, ums_per, created_at'
+
 export function studentAuthEmail(matricNumber: string) {
   const normalized = matricNumber.trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
   return `${normalized}@student.local`
@@ -74,7 +76,7 @@ export async function getCurrentAppUser() {
 
   const { data, error } = await supabase
     .from('users')
-    .select('id, role, matric_number, ic_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, channel, motto, job_title, grade, ums_per, created_at')
+    .select(SAFE_USER_FIELDS)
     .eq('id', authUser.id)
     .single()
 
