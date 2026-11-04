@@ -38,12 +38,14 @@ type UserQueryResult = {
   error: { code?: string; message?: string } | null
 }
 
+type UserQueryBuilder = PromiseLike<UserQueryResult>
+
 function isMissingMentorStaffFields(error: { code?: string; message?: string } | null) {
   return error?.code === '42703' || Boolean(error?.message?.match(/job_title|ums_per|grade/i))
 }
 
 async function selectUsersWithSchemaFallback(
-  buildQuery: (fields: string) => PromiseLike<UserQueryResult>,
+  buildQuery: (fields: string) => UserQueryBuilder,
 ) {
   const first = await buildQuery(SAFE_USER_FIELDS)
   if (!first.error || !isMissingMentorStaffFields(first.error)) return first
@@ -56,7 +58,7 @@ export async function listAllUsers(): Promise<UserRow[]> {
     .select(fields)
       .order('role')
       .order('name')
-      .limit(2000))
+      .limit(2000) as unknown as UserQueryBuilder)
   if (error) throw new Error(error.message)
   return data ?? []
 }
@@ -70,7 +72,7 @@ export async function getStudentsByProgramme(programme?: string): Promise<UserRo
     .order('name')
       .limit(2000)
     if (programme) q = q.eq('programme', programme)
-    return q
+    return q as unknown as UserQueryBuilder
   })
   if (error) throw new Error(error.message)
   return data ?? []
@@ -82,7 +84,7 @@ export async function getAvailableMentors(): Promise<UserRow[]> {
     .select(fields)
     .eq('role', 'lecturer')
     .order('name')
-      .limit(2000))
+      .limit(2000) as unknown as UserQueryBuilder)
   if (error) throw new Error(error.message)
   return data ?? []
 }
@@ -96,7 +98,7 @@ export async function searchUsers(query: string): Promise<UserRow[]> {
     .or(`name.ilike.%${safeQuery}%,email.ilike.%${safeQuery}%,matric_number.ilike.%${safeQuery}%`)
     .order('role')
     .order('name')
-    .limit(50))
+    .limit(50) as unknown as UserQueryBuilder)
   if (error) throw new Error(error.message)
   return data ?? []
 }
@@ -115,7 +117,7 @@ export async function findUserByIdentifier(identifier: string): Promise<UserRow 
       .from('users')
       .select(fields)
       .eq(field, candidate)
-      .limit(2))
+      .limit(2) as unknown as UserQueryBuilder)
     if (error) throw new Error(error.message)
     if (data?.length === 1) return data[0]
     if (data && data.length > 1) throw new Error(`Mentor value "${value}" matches more than one user.`)
