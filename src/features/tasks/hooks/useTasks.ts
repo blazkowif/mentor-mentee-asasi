@@ -15,10 +15,10 @@ export function useLecturerTasks(lecturerId: string | undefined) {
   })
 }
 
-export function useMentorTasks(mentorId: string | null | undefined) {
+export function useMentorTasks(mentorId: string | null | undefined, studentId?: string) {
   return useQuery({
-    queryKey: queryKeys.tasks.byMentor(mentorId ?? ''),
-    queryFn: () => taskService.listTasksByMentor(mentorId!),
+    queryKey: [...queryKeys.tasks.byMentor(mentorId ?? ''), studentId ?? ''],
+    queryFn: () => taskService.listTasksByMentor(mentorId!, studentId),
     enabled: !!mentorId,
   })
 }

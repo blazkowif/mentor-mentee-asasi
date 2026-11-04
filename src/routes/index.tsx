@@ -41,11 +41,12 @@ export default function AppRoutes() {
           <Route path="/admin/lecturer/:id" element={<UserDetailPage />} />
           <Route path="/admin/control" element={<AdminControlPage />} />
         </Route>
+      </Route>
 
-        <Route element={<ProtectedRoute allowedRoles={['lecturer']} />}>
-          <Route element={<AppLayout />}>
-            <Route path="/mentor-notes" element={<MentorNotesPage />} />
-          </Route>
+      {/* Lecturer-only pages */}
+      <Route element={<ProtectedRoute allowedRoles={['lecturer']} />}>
+        <Route element={<AppLayout />}>
+          <Route path="/mentor-notes" element={<MentorNotesPage />} />
         </Route>
       </Route>
 

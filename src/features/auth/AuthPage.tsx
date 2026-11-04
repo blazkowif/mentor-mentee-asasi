@@ -106,8 +106,13 @@ export default function AuthPage() {
         <BackgroundIcons />
         <header className="auth-brand">
           <img className="auth-brand__logo" src={ppstLogo} alt="Universiti Malaysia Sabah, Pusat Persediaan Sains dan Teknologi" />
+          <div className="auth-brand__system">
+            <span>MENTOR–MENTEE</span>
+            <strong>SYSTEM</strong>
+          </div>
         </header>
         <div className="auth-intro__content">
+          <p className="auth-kicker">UMS PPST · Mentor–Mentee System</p>
           <h1>Better guidance.<br /><em>Brighter outcomes.</em></h1>
           <p className="auth-intro__copy">
             A purposeful space for meaningful mentorship, progress tracking, and the people who help you move forward.

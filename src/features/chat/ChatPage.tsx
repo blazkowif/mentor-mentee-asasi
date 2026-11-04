@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/features/auth/authStore'
 import type { Database } from '@/types/database.types'
 import { queryKeys } from '@/lib/queryKeys'
@@ -21,6 +21,8 @@ import * as chatService from '@/services/chatService'
 import ConversationList, { type ChatThread } from './components/ConversationList'
 import MessageBubble from './components/MessageBubble'
 import MessageInput from './components/MessageInput'
+import * as userService from '@/services/userService'
+import * as mentorNotesService from '@/services/mentorNotesService'
 
 type Message = Database['public']['Tables']['messages']['Row']
 
@@ -47,6 +49,22 @@ export default function ChatPage() {
   const sendMessage = useSendMessage()
   const deleteMessage = useDeleteMessage()
   const [clearingHistory, setClearingHistory] = useState(false)
+  const [profileUserId, setProfileUserId] = useState<string | null>(null)
+  const [profileNote, setProfileNote] = useState('')
+  const [profileNoteMessage, setProfileNoteMessage] = useState('')
+  const [mentorNote, setMentorNote] = useState('')
+  const [mentorNoteMessage, setMentorNoteMessage] = useState('')
+  const profileQuery = useQuery({ queryKey: ['chat-profile', profileUserId ?? ''], queryFn: () => userService.getProfile(profileUserId!), enabled: !!profileUserId })
+  const adminNotesQuery = useQuery({
+    queryKey: ['internal-notes', profileUserId ?? ''],
+    queryFn: () => mentorNotesService.listInternalNotes(profileUserId!),
+    enabled: isAdmin && !!profileUserId,
+  })
+  const mentorNotesQuery = useQuery({
+    queryKey: ['mentor-notes', 'profile', profileUserId ?? ''],
+    queryFn: () => mentorNotesService.listMentorNotes(profileUserId!),
+    enabled: (isAdmin || isLecturer) && !!profileUserId,
+  })
 
   const threads: ChatThread[] = useMemo(() => {
     const list: ChatThread[] = []
@@ -198,6 +216,36 @@ export default function ChatPage() {
     }
   }
 
+  async function saveProfileNote() {
+    if (!user || !profileUserId || !profileNote.trim()) return
+    try {
+      await mentorNotesService.createInternalNote(profileUserId, user.id, profileNote.trim())
+      setProfileNote('')
+      setProfileNoteMessage('Note saved.')
+      await queryClient.invalidateQueries({ queryKey: ['internal-notes', profileUserId] })
+    } catch (error) {
+      setProfileNoteMessage(error instanceof Error ? error.message : 'Unable to save note.')
+    }
+  }
+
+  async function saveMentorNote() {
+    if (!user || !profileUserId || !mentorNote.trim() || !isLecturer) return
+    try {
+      await mentorNotesService.createMentorNote({
+        student_id: profileUserId,
+        mentor_id: user.id,
+        category: 'general',
+        note: mentorNote.trim(),
+      })
+      setMentorNote('')
+      setMentorNoteMessage('Sticky note saved.')
+      await queryClient.invalidateQueries({ queryKey: ['mentor-notes', 'profile', profileUserId] })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.mentorNotes.byMentor(user.id) })
+    } catch (error) {
+      setMentorNoteMessage(error instanceof Error ? error.message : 'Unable to save mentor note.')
+    }
+  }
+
   async function handleClearHistory() {
     if (!window.confirm('Delete every personal and group chat message for all users? This cannot be undone.')) return
     setClearingHistory(true)
@@ -248,7 +296,9 @@ export default function ChatPage() {
         {activeThread ? (
           <>
             <div className="border-b border-[#3a405c] bg-[#252a40] px-5 py-4">
-              <span className="font-semibold text-white">{activeThread.label}</span>
+              <button type="button" onClick={() => otherUserId && setProfileUserId(otherUserId)} className="font-semibold text-white hover:underline">
+                {activeThread.label}
+              </button>
               <span className="ml-2 text-xs text-[#8f95b5]">{activeThread.subtitle}</span>
             </div>
             <div className="flex-1 space-y-2 overflow-y-auto bg-[#171b2b] p-5">
@@ -284,6 +334,90 @@ export default function ChatPage() {
           </div>
         )}
       </div>
+      {profileUserId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setProfileUserId(null)}>
+          <section className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
+            {profileQuery.isLoading && <p className="text-sm text-gray-500">Loading profile…</p>}
+            {profileQuery.isError && (
+              <div>
+                <p className="text-sm text-red-600">Unable to load this profile.</p>
+                <p className="mt-1 text-xs text-gray-500">{profileQuery.error instanceof Error ? profileQuery.error.message : 'Please try again.'}</p>
+              </div>
+            )}
+            {profileQuery.data && <>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">{profileQuery.data.name}</h2>
+                  <p className="text-sm capitalize text-gray-500">
+                    {profileQuery.data.role === 'lecturer' ? 'Mentor profile' : profileQuery.data.role}
+                  </p>
+                </div>
+                <button type="button" onClick={() => setProfileUserId(null)} className="text-xl text-gray-400" aria-label="Close profile">×</button>
+              </div>
+              <dl className="mt-4 space-y-2 text-sm">
+                <div><dt className="text-xs text-gray-400">Matric / staff ID</dt><dd>{profileQuery.data.matric_number || '—'}</dd></div>
+                <div><dt className="text-xs text-gray-400">Programme</dt><dd>{profileQuery.data.programme || '—'}</dd></div>
+                <div>
+                  <dt className="text-xs text-gray-400">Email</dt>
+                  <dd>
+                    {profileQuery.data.email ? (
+                      <a href={`mailto:${profileQuery.data.email}`} className="text-ums-blue hover:underline">{profileQuery.data.email}</a>
+                    ) : '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-gray-400">Phone</dt>
+                  <dd>
+                    {profileQuery.data.phone ? (
+                      <a href={`tel:${profileQuery.data.phone}`} className="text-ums-blue hover:underline">{profileQuery.data.phone}</a>
+                    ) : '—'}
+                  </dd>
+                </div>
+                <div><dt className="text-xs text-gray-400">Address</dt><dd className="whitespace-pre-wrap">{profileQuery.data.address || '—'}</dd></div>
+                <div><dt className="text-xs text-gray-400">Motto</dt><dd className="italic text-gray-700">{profileQuery.data.motto || '—'}</dd></div>
+              </dl>
+              {(isAdmin || isLecturer) && profileQuery.data.role === 'student' && (
+                <div className="mt-5 border-t pt-4">
+                  <h3 className="text-sm font-semibold text-gray-700">Mentor sticky notes</h3>
+                  {mentorNotesQuery.data?.length ? (
+                    <div className="mt-2 space-y-2">
+                      {mentorNotesQuery.data.map((entry) => (
+                        <div key={entry.id} className="rounded border border-amber-200 bg-amber-50 p-3 shadow-sm">
+                          <p className="whitespace-pre-wrap text-sm text-gray-700">{entry.note}</p>
+                          <p className="mt-1 text-xs text-gray-500">{entry.category.replace('_', ' ')} · {new Date(entry.created_at).toLocaleString()}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-gray-500">No mentor notes for this student yet.</p>
+                  )}
+                  {isLecturer && (
+                    <div className="mt-3">
+                      <textarea value={mentorNote} onChange={(event) => setMentorNote(event.target.value)} rows={3} className="w-full rounded border px-3 py-2 text-sm" placeholder="Add a sticky note about this student..." />
+                      <button type="button" onClick={saveMentorNote} disabled={!mentorNote.trim()} className="mt-2 rounded bg-amber-500 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">Add sticky note</button>
+                      {mentorNoteMessage && <p className="mt-2 text-xs text-gray-600">{mentorNoteMessage}</p>}
+                    </div>
+                  )}
+                </div>
+              )}
+            {isAdmin && profileQuery.data.role === 'student' && (
+              <div className="mt-5 border-t pt-4">
+                <h3 className="text-sm font-semibold text-gray-700">Admin note</h3>
+                <p className="mt-1 text-xs text-gray-500">Visible to administrators and the assigned mentor.</p>
+                <textarea value={profileNote} onChange={(event) => setProfileNote(event.target.value)} rows={3} className="mt-2 w-full rounded border px-3 py-2 text-sm" placeholder="Leave a note about this student..." />
+                <button type="button" onClick={saveProfileNote} disabled={!profileNote.trim()} className="mt-2 rounded bg-ums-blue px-3 py-2 text-sm font-medium text-white disabled:opacity-50">Save note</button>
+                {profileNoteMessage && <p className="mt-2 text-xs text-gray-600">{profileNoteMessage}</p>}
+                <div className="mt-3 space-y-2">
+                  {adminNotesQuery.data?.slice(0, 3).map((entry) => (
+                    <p key={entry.id} className="rounded bg-gray-50 p-2 text-xs text-gray-700">{entry.note}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+            </>}
+          </section>
+        </div>
+      )}
     </div>
   )
 }

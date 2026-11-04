@@ -25,56 +25,79 @@ export type UserInput = {
   study_status?: string | null
   channel?: string | null
   motto?: string | null
+  job_title?: string | null
+  grade?: string | null
+  ums_per?: string | null
 }
 export type AuthUserAction = 'create' | 'update' | 'delete' | 'delete_all_students' | 'delete_all_mentors'
-const SAFE_USER_FIELDS = 'id, role, matric_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, channel, motto, created_at'
+const SAFE_USER_FIELDS = 'id, role, matric_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, channel, motto, job_title, grade, ums_per, created_at'
+const LEGACY_USER_FIELDS = 'id, role, matric_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, channel, motto, created_at'
+
+type UserQueryResult = {
+  data: UserRow[] | null
+  error: { code?: string; message?: string } | null
+}
+
+function isMissingMentorStaffFields(error: { code?: string; message?: string } | null) {
+  return error?.code === '42703' || Boolean(error?.message?.match(/job_title|ums_per|grade/i))
+}
+
+async function selectUsersWithSchemaFallback(
+  buildQuery: (fields: string) => PromiseLike<UserQueryResult>,
+) {
+  const first = await buildQuery(SAFE_USER_FIELDS)
+  if (!first.error || !isMissingMentorStaffFields(first.error)) return first
+  return buildQuery(LEGACY_USER_FIELDS)
+}
 
 export async function listAllUsers(): Promise<UserRow[]> {
-  const { data, error } = await supabase
+  const { data, error } = await selectUsersWithSchemaFallback((fields) => supabase
     .from('users')
-    .select(SAFE_USER_FIELDS)
+    .select(fields)
       .order('role')
       .order('name')
-      .limit(2000)
-  if (error) throw error
+      .limit(2000))
+  if (error) throw new Error(error.message)
   return data ?? []
 }
 
 export async function getStudentsByProgramme(programme?: string): Promise<UserRow[]> {
-  let q = supabase
+  const { data, error } = await selectUsersWithSchemaFallback((fields) => {
+    let q = supabase
     .from('users')
-    .select(SAFE_USER_FIELDS)
+    .select(fields)
     .eq('role', 'student')
     .order('name')
       .limit(2000)
-  if (programme) q = q.eq('programme', programme)
-  const { data, error } = await q
-  if (error) throw error
+    if (programme) q = q.eq('programme', programme)
+    return q
+  })
+  if (error) throw new Error(error.message)
   return data ?? []
 }
 
 export async function getAvailableMentors(): Promise<UserRow[]> {
-  const { data, error } = await supabase
+  const { data, error } = await selectUsersWithSchemaFallback((fields) => supabase
     .from('users')
-    .select(SAFE_USER_FIELDS)
+    .select(fields)
     .eq('role', 'lecturer')
     .order('name')
-      .limit(2000)
-  if (error) throw error
+      .limit(2000))
+  if (error) throw new Error(error.message)
   return data ?? []
 }
 
 export async function searchUsers(query: string): Promise<UserRow[]> {
   const safeQuery = query.trim().replace(/[%,.()_]/g, '')
   if (!safeQuery) return []
-  const { data, error } = await supabase
+  const { data, error } = await selectUsersWithSchemaFallback((fields) => supabase
     .from('users')
-    .select(SAFE_USER_FIELDS)
+    .select(fields)
     .or(`name.ilike.%${safeQuery}%,email.ilike.%${safeQuery}%,matric_number.ilike.%${safeQuery}%`)
     .order('role')
     .order('name')
-    .limit(50)
-  if (error) throw error
+    .limit(50))
+  if (error) throw new Error(error.message)
   return data ?? []
 }
 
@@ -88,12 +111,12 @@ export async function findUserByIdentifier(identifier: string): Promise<UserRow 
     ['name', value],
   ] as const
   for (const [field, candidate] of fields) {
-    const { data, error } = await supabase
+    const { data, error } = await selectUsersWithSchemaFallback((fields) => supabase
       .from('users')
-      .select(SAFE_USER_FIELDS)
+      .select(fields)
       .eq(field, candidate)
-      .limit(2)
-    if (error) throw error
+      .limit(2))
+    if (error) throw new Error(error.message)
     if (data?.length === 1) return data[0]
     if (data && data.length > 1) throw new Error(`Mentor value "${value}" matches more than one user.`)
   }

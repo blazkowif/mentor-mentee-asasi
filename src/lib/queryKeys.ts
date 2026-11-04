@@ -16,9 +16,21 @@ export const queryKeys = {
     mySubmission: (taskId: string, studentId: string) =>
       ['tasks', 'submission', taskId, studentId] as const,
   },
+  meetings: {
+    tasks: () => ['meetings', 'tasks'] as const,
+    assignments: (mentorId?: string) => ['meetings', 'assignments', mentorId ?? 'all'] as const,
+    reports: () => ['meetings', 'reports'] as const,
+  },
   announcements: {
     byLecturer: (lecturerId: string) => ['announcements', 'lecturer', lecturerId] as const,
     byMentor: (mentorId: string) => ['announcements', 'mentor', mentorId] as const,
+  },
+  mentorNotes: {
+    byMentor: (mentorId: string) => ['mentor-notes', 'mentor', mentorId] as const,
+    byStudent: (studentId: string) => ['mentor-notes', 'student', studentId] as const,
+  },
+  internalNotes: {
+    byTarget: (targetUserId: string) => ['internal-notes', targetUserId] as const,
   },
   chat: {
     personal: (userA: string, userB: string) =>

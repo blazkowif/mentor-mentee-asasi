@@ -283,6 +283,8 @@ export const adminKeys = {
 ## 10. Out of Scope (Future)
 
 - CSV bulk import / export (PRD §14–15 mentions this explicitly)
+- Mentor Excel imports use the five staff fields `NAMA`, `JAWATAN`, `GRED`, `UMS PER`, and `EMAIL`, plus the administrator-selected password. These staff fields are stored on the mentor profile.
+- Assignment imports accept a student name or matric number and a mentor name. Existing records are matched by exact matric/name first, then by normalized typo- and prefix-tolerant similarity; the preview identifies low-confidence rows before applying valid assignments.
 - Real-time presence indicators
 - Lecturer-specific profile fields (Staff ID, Faculty)
 - Activity-log charts/engagement metrics (data will exist once triggers fire; UI later)

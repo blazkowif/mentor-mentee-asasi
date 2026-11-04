@@ -110,6 +110,21 @@
   .auth-brand, .auth-intro__content, .auth-intro__footer { position: relative; z-index: 2; }
   .auth-brand { display: flex; width: min(100%, clamp(15rem, 27vw, 31rem)); align-items: center; }
   .auth-brand__logo { display: block; width: 100%; height: auto; }
+  .auth-brand__system {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    margin-left: clamp(.65rem, 1.4vw, 1.4rem);
+    padding-left: clamp(.65rem, 1.4vw, 1.4rem);
+    border-left: 1px solid rgba(255,255,255,.35);
+    color: rgba(255,255,255,.82);
+    font-size: clamp(.5rem, .68vw, .72rem);
+    font-weight: 700;
+    letter-spacing: .16em;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+  .auth-brand__system strong { color: var(--accent); font-size: 1.05em; letter-spacing: .24em; }
   .auth-brand__mark {
     display: grid;
     width: clamp(2.4rem, 4vw, 3.5rem);
@@ -126,7 +141,7 @@
   .auth-brand__name { font-size: clamp(.72rem, .9vw, .95rem); font-weight: 700; letter-spacing: .22em; }
   .auth-brand__subline { margin-top: .18rem; color: rgba(255,255,255,.67); font-size: clamp(.56rem, .7vw, .76rem); }
 
-  .auth-intro__content { max-width: 44rem; margin: auto 0; padding: clamp(1rem, 3vw, 3rem) 0; }
+  .auth-intro__content { max-width: 44rem; margin: auto 0; padding: clamp(1rem, 3vw, 3rem) 0; animation: content-in 700ms ease both; }
   .auth-kicker, .auth-panel__eyebrow {
     color: var(--accent);
     font-size: clamp(.58rem, .7vw, .76rem);
@@ -219,6 +234,7 @@
   @media (max-width: 800px) {
     .auth-page { grid-template-columns: 1fr; grid-template-rows: minmax(12rem, 38dvh) minmax(0, 62dvh); }
     .auth-intro { padding: clamp(1.1rem, 5vw, 2rem); }
+    .auth-brand__system { font-size: .5rem; }
     .auth-intro__content { padding: .5rem 0 1rem; }
     .auth-intro h1 { margin: .55rem 0; font-size: clamp(2rem, 9vw, 3.6rem); }
     .auth-intro__copy, .auth-intro__footer { display: none; }

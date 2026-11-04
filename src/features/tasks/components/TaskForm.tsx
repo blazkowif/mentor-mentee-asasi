@@ -9,16 +9,22 @@ interface TaskFormProps {
     description: string
     due_date: string | null
     priority: Priority
+    target_role?: 'student' | 'lecturer' | null
+    target_student_id?: string | null
   }) => void
   isSubmitting?: boolean
   onCancel: () => void
+  audienceOptions?: Array<{ value: 'student' | 'lecturer' | 'all'; label: string }>
+  studentOptions?: Array<{ id: string; name: string }>
 }
 
-export default function TaskForm({ onSubmit, isSubmitting, onCancel }: TaskFormProps) {
+export default function TaskForm({ onSubmit, isSubmitting, onCancel, audienceOptions, studentOptions = [] }: TaskFormProps) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [priority, setPriority] = useState<Priority>('medium')
+  const [audience, setAudience] = useState<'student' | 'lecturer' | 'all'>('student')
+  const [studentId, setStudentId] = useState('')
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -27,6 +33,8 @@ export default function TaskForm({ onSubmit, isSubmitting, onCancel }: TaskFormP
       description,
       due_date: dueDate ? new Date(dueDate).toISOString() : null,
       priority,
+      target_role: audience === 'all' ? null : audience,
+      target_student_id: studentId || null,
     })
   }
 
@@ -60,6 +68,24 @@ export default function TaskForm({ onSubmit, isSubmitting, onCancel }: TaskFormP
             onChange={(e) => setDueDate(e.target.value)}
           />
         </div>
+
+        {audienceOptions && (
+          <div className="mb-3 grid grid-cols-2 gap-3">
+            <label className="text-xs font-medium text-gray-600">Audience
+              <select className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" value={audience} onChange={(e) => setAudience(e.target.value as typeof audience)}>
+                {audienceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            {audience === 'student' && studentOptions.length > 0 && (
+              <label className="text-xs font-medium text-gray-600">Specific student (optional)
+                <select className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" value={studentId} onChange={(e) => setStudentId(e.target.value)}>
+                  <option value="">All students</option>
+                  {studentOptions.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}
+                </select>
+              </label>
+            )}
+          </div>
+        )}
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">Priority</label>
           <select

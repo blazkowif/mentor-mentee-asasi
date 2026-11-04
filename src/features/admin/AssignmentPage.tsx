@@ -1,18 +1,68 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, type ChangeEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import * as XLSX from 'xlsx'
 import * as adminService from '@/services/adminService'
 import { queryKeys } from '@/lib/queryKeys'
 
-type Programme = 'Asasi Sains' | 'Asasi Teknologi' | 'Asasi Agrisains' | 'Asasi Sains Sosial' | 'all'
+type Programme = 'UH0010001' | 'UH0010002' | 'UH0010003' | 'UH0010004' | 'all'
+type ImportMatch = {
+  row: number
+  student: adminService.UserRow | null
+  mentor: adminService.UserRow | null
+  matricValue: string
+  programmeValue: string
+  studentValue: string
+  mentorValue: string
+  confidence: number
+}
 
 const PROGRAMMES: Programme[] = [
   'all',
-  'Asasi Sains',
-  'Asasi Teknologi',
-  'Asasi Agrisains',
-  'Asasi Sains Sosial',
+  'UH0010001',
+  'UH0010002',
+  'UH0010003',
+  'UH0010004',
 ]
+const PROGRAMME_LABELS: Record<Programme, string> = {
+  all: 'All programmes',
+  UH0010001: 'UH0010001 · Asasi Sains · Foundation in Science',
+  UH0010002: 'UH0010002 · Asasi Teknologi Maklumat · Foundation in Information Technology',
+  UH0010003: 'UH0010003 · Asasi Agrisains · Foundation in Agricultural Science',
+  UH0010004: 'UH0010004 · Asasi Sains Sosial · Foundation in Social Science',
+}
+
+function normalize(value: string | null | undefined) {
+  return (value ?? '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
+}
+
+function similarity(left: string, right: string) {
+  if (!left || !right) return 0
+  if (left === right) return 1
+  if (left.includes(right) || right.includes(left)) return 0.88
+  const matrix = Array.from({ length: left.length + 1 }, (_, row) =>
+    Array.from({ length: right.length + 1 }, (_, column) => row === 0 ? column : column === 0 ? row : 0),
+  )
+  for (let row = 1; row <= left.length; row += 1) {
+    for (let column = 1; column <= right.length; column += 1) {
+      matrix[row][column] = Math.min(
+        matrix[row - 1][column] + 1,
+        matrix[row][column - 1] + 1,
+        matrix[row - 1][column - 1] + (left[row - 1] === right[column - 1] ? 0 : 1),
+      )
+    }
+  }
+  return 1 - matrix[left.length][right.length] / Math.max(left.length, right.length)
+}
+
+function bestMatch(value: string, candidates: adminService.UserRow[]) {
+  const target = normalize(value)
+  if (!target) return { mentor: null, confidence: 0 }
+  const ranked = candidates
+    .map((candidate) => ({ mentor: candidate, confidence: similarity(target, normalize(candidate.name)) }))
+    .sort((left, right) => right.confidence - left.confidence)
+  return ranked[0] ?? { mentor: null, confidence: 0 }
+}
 
 export default function AssignmentPage() {
   const [programme, setProgramme] = useState<Programme>('all')
@@ -21,6 +71,16 @@ export default function AssignmentPage() {
   const [page, setPage] = useState(1)
   const pageSize = 50
   const [error, setError] = useState<string | null>(null)
+  const [importMatches, setImportMatches] = useState<ImportMatch[]>([])
+  const [importingFile, setImportingFile] = useState(false)
+  const [assignmentHeaders, setAssignmentHeaders] = useState<string[]>([])
+  const [assignmentRows, setAssignmentRows] = useState<Record<string, unknown>[]>([])
+  const [assignmentMapping, setAssignmentMapping] = useState({
+    matric: '',
+    name: '',
+    programme: '',
+    mentor: '',
+  })
 
   const {
     data: students = [],
@@ -29,6 +89,10 @@ export default function AssignmentPage() {
     queryKey: queryKeys.admin.students(programme === 'all' ? undefined : programme),
     queryFn: () =>
       adminService.getStudentsByProgramme(programme === 'all' ? undefined : programme),
+  })
+  const { data: allStudents = [], isLoading: allStudentsLoading } = useQuery({
+    queryKey: queryKeys.admin.students(),
+    queryFn: () => adminService.getStudentsByProgramme(),
   })
   const {
     data: mentors = [],
@@ -61,6 +125,95 @@ export default function AssignmentPage() {
     },
     onError: (err) => setError(err instanceof Error ? err.message : 'Unable to auto-assign mentors.'),
   })
+  const importAssignments = useMutation({
+    mutationFn: async () => {
+      const groups = new Map<string, string[]>()
+      importMatches.forEach((match) => {
+        if (!match.student || !match.mentor || match.confidence < 0.55) return
+        const ids = groups.get(match.mentor.id) ?? []
+        ids.push(match.student.id)
+        groups.set(match.mentor.id, ids)
+      })
+      await Promise.all(Array.from(groups, ([mentorId, ids]) => adminService.bulkAssignMentors(ids, mentorId)))
+      return groups.size
+    },
+    onSuccess: () => {
+      setImportMatches([])
+      setError(null)
+      qc.invalidateQueries({ queryKey: queryKeys.users.all() })
+      qc.invalidateQueries({ queryKey: queryKeys.admin.all })
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : 'Unable to import mentor assignments.'),
+  })
+
+  async function readAssignmentFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setImportingFile(true)
+    setError(null)
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
+      const headers = records.length ? Object.keys(records[0]) : []
+      const findHeader = (aliases: string[]) => headers.find((header) => aliases.includes(normalize(header))) ?? ''
+      const nextMapping = {
+        matric: findHeader(['nomatrik', 'matricnumber', 'matric', 'studentid']),
+        name: findHeader(['nama', 'name', 'studentname', 'student']),
+        programme: findHeader(['namaprogram', 'program', 'programme', 'course']),
+        mentor: findHeader(['mentor', 'mentname', 'mentorname', 'namamentor', 'lecturer']),
+      }
+      if ((!nextMapping.matric && !nextMapping.name) || !nextMapping.mentor) {
+        throw new Error('The spreadsheet must contain a student column (Nama or NoMatrik) and a Mentor column.')
+      }
+      setAssignmentHeaders(headers)
+      setAssignmentRows(records)
+      setAssignmentMapping(nextMapping)
+      setImportMatches([])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to read assignment spreadsheet.')
+    } finally {
+      setImportingFile(false)
+      event.target.value = ''
+    }
+  }
+
+  function previewAssignments() {
+    if ((!assignmentMapping.matric && !assignmentMapping.name) || !assignmentMapping.mentor) {
+      setError('Select a student column (Nama or NoMatrik) and a Mentor column before previewing.')
+      return
+    }
+    if (!assignmentRows.length) {
+      setError('Select an assignment spreadsheet before previewing.')
+      return
+    }
+    const matches = assignmentRows.map((record, index) => {
+        const matricValue = assignmentMapping.matric ? String(record[assignmentMapping.matric] ?? '').trim() : ''
+        const nameValue = assignmentMapping.name ? String(record[assignmentMapping.name] ?? '').trim() : ''
+        const programmeValue = assignmentMapping.programme ? String(record[assignmentMapping.programme] ?? '').trim() : ''
+        const mentorValue = String(record[assignmentMapping.mentor] ?? '').trim()
+        const studentValue = nameValue || matricValue
+        const exactStudent = allStudents.find((student) =>
+          (matricValue && student.matric_number && normalize(student.matric_number) === normalize(matricValue)) ||
+          (nameValue && normalize(student.name) === normalize(nameValue)),
+        )
+        const student = exactStudent ?? bestMatch(studentValue, allStudents).mentor
+        const mentorResult = bestMatch(mentorValue, mentors)
+        const studentConfidence = exactStudent ? 1 : bestMatch(studentValue, allStudents).confidence
+        return {
+          row: index + 2,
+          student,
+          mentor: mentorResult.mentor,
+          matricValue,
+          programmeValue,
+          studentValue,
+          mentorValue,
+          confidence: Math.min(studentConfidence, mentorResult.confidence),
+        }
+    })
+    setImportMatches(matches)
+    setError(null)
+  }
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return students
@@ -77,7 +230,7 @@ export default function AssignmentPage() {
     [filtered, page],
   )
 
-  if (studentsLoading || mentorsLoading) {
+  if (studentsLoading || mentorsLoading || allStudentsLoading) {
     return <p className="text-sm text-gray-500">Loading…</p>
   }
 
@@ -109,7 +262,7 @@ export default function AssignmentPage() {
             }}
             className={`rounded-full px-3 py-1.5 text-xs font-medium ${programme === p ? 'bg-ums-blue text-white' : 'bg-white text-gray-700'}`}
           >
-            {p === 'all' ? 'All programmes' : p}
+            {PROGRAMME_LABELS[p]}
           </button>
         ))}
         <input
@@ -123,6 +276,58 @@ export default function AssignmentPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm text-gray-600">
           {filtered.length} students · {unassignedCount} unassigned
+        </div>
+
+        <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-4">
+          <h2 className="text-sm font-semibold text-blue-900">Import student–mentor assignments</h2>
+          <p className="mt-1 text-xs text-blue-800">Upload Excel with a student column (Nama or Nomatrik) and a Mentor column. Existing students are matched first by matric/name, then by typo- and prefix-tolerant name similarity.</p>
+          <input type="file" accept=".xlsx,.xls,.csv" onChange={readAssignmentFile} disabled={importingFile} className="mt-3 block text-sm" />
+          {assignmentHeaders.length > 0 && (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {([
+                  ['matric', 'NoMatrik column', 'Optional if a Nama column is provided'],
+                  ['name', 'Nama column', 'Optional if a NoMatrik column is provided'],
+                  ['programme', 'Programme column', 'Optional'],
+                  ['mentor', 'Mentor column', 'Required'],
+              ] as const).map(([field, label, help]) => (
+                  <label key={field} className="text-xs font-medium text-blue-900">
+                    {label}
+                    <select
+                      className="mt-1 w-full rounded border border-blue-200 bg-white px-2 py-1.5 text-sm text-gray-700"
+                      value={assignmentMapping[field]}
+                      onChange={(event) => setAssignmentMapping((previous) => ({ ...previous, [field]: event.target.value }))}
+                    >
+                      <option value="">Do not import</option>
+                      {assignmentHeaders.map((header) => <option key={header} value={header}>{header}</option>)}
+                    </select>
+                    <span className="font-normal text-blue-700">{help}</span>
+                  </label>
+              ))}
+              <button type="button" onClick={previewAssignments} className="rounded bg-ums-blue px-3 py-2 text-sm font-medium text-white sm:col-span-2">
+                  Preview assignments
+              </button>
+            </div>
+          )}
+          {importMatches.length > 0 && (
+            <div className="mt-3 space-y-3">
+              <div className="max-h-96 overflow-auto rounded bg-white">
+                  <table className="w-full text-left text-xs">
+                  <thead className="sticky top-0 border-b bg-white"><tr><th className="p-2">Row</th><th className="p-2">NoMatrik</th><th className="p-2">Student in file</th><th className="p-2">Programme</th><th className="p-2">Detected student</th><th className="p-2">Mentor in file</th><th className="p-2">Detected mentor</th><th className="p-2">Confidence</th></tr></thead>
+                  <tbody className="divide-y">
+                    {importMatches.slice(0, 100).map((match) => (
+                      <tr key={match.row} className={match.student && match.mentor && match.confidence >= 0.55 ? '' : 'bg-red-50'}>
+                          <td className="p-2">{match.row}</td><td className="p-2">{match.matricValue || '—'}</td><td className="p-2">{match.studentValue || '—'}</td><td className="p-2">{match.programmeValue || '—'}</td><td className="p-2">{match.student?.name ?? 'Not found'}</td><td className="p-2">{match.mentorValue || '—'}</td><td className="p-2">{match.mentor?.name ?? 'Not found'}</td><td className="p-2">{Math.round(match.confidence * 100)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <button type="button" disabled={importAssignments.isPending || !importMatches.some((match) => match.student && match.mentor && match.confidence >= 0.55)} onClick={() => importAssignments.mutate()} className="rounded bg-ums-blue px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
+                {importAssignments.isPending ? 'Assigning…' : `Apply ${importMatches.filter((match) => match.student && match.mentor && match.confidence >= 0.55).length} detected assignments`}
+              </button>
+              {importMatches.length > 100 && <p className="text-xs text-blue-800">Showing the first 100 rows. All valid rows will be applied.</p>}
+            </div>
+          )}
         </div>
         <button
           disabled={autoAssign.isPending || selectedIds.size === 0}

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import { format } from 'date-fns'
+import { useAuthStore } from '@/features/auth/authStore'
 import * as adminService from '@/services/adminService'
 import * as mentorNotesService from '@/services/mentorNotesService'
 import { queryKeys } from '@/lib/queryKeys'
@@ -9,6 +10,8 @@ import { queryKeys } from '@/lib/queryKeys'
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [activeTab, setActiveTab] = useState<'profile' | 'activity' | 'support'>('profile')
+  const [adminNote, setAdminNote] = useState('')
+  const [adminNoteMessage, setAdminNoteMessage] = useState('')
 
   const userId = id === 'none' ? undefined : id
 
@@ -37,6 +40,11 @@ export default function UserDetailPage() {
     queryFn: () => (userId ? mentorNotesService.listAttentionFlags(userId) : Promise.resolve([])),
     enabled: !!userId && isStudent && activeTab === 'support',
   })
+  const { data: internalNotes = [] } = useQuery({
+    queryKey: ['internal-notes', userId ?? 'none'],
+    queryFn: () => (userId ? mentorNotesService.listInternalNotes(userId) : Promise.resolve([])),
+    enabled: !!userId,
+  })
 
   const mentor = useMemo(
     () => users.find((u) => u.id === user?.mentor_id),
@@ -46,6 +54,19 @@ export default function UserDetailPage() {
     () => users.filter((u) => u.mentor_id === user?.id),
     [users, user],
   )
+
+  async function saveAdminNote() {
+    if (!userId || !adminNote.trim()) return
+    try {
+      const currentAdmin = useAuthStore.getState().user
+      if (!currentAdmin) return
+      await mentorNotesService.createInternalNote(userId, currentAdmin.id, adminNote.trim())
+      setAdminNote('')
+      setAdminNoteMessage('Internal note saved.')
+    } catch (error) {
+      setAdminNoteMessage(error instanceof Error ? error.message : 'Unable to save internal note.')
+    }
+  }
 
   if (usersLoading) return <p className="text-sm text-gray-500">Loading…</p>
   if (!userId) {
@@ -237,6 +258,20 @@ export default function UserDetailPage() {
                     ))}
                   </ul>
                 )}
+                <section className="mt-4 rounded-lg bg-white p-4 shadow-sm">
+                  <h3 className="mb-1 text-sm font-semibold text-gray-700">Internal coordination note</h3>
+                  <p className="mb-2 text-xs text-gray-500">Visible to administrators and the assigned mentor. Never visible to the student.</p>
+                  <textarea value={adminNote} onChange={(event) => setAdminNote(event.target.value)} rows={3} className="w-full rounded border border-gray-200 px-3 py-2 text-sm" placeholder="Add a note for the mentor..." />
+                  <div className="mt-2 flex items-center gap-3">
+                    <button type="button" onClick={saveAdminNote} disabled={!adminNote.trim()} className="rounded bg-ums-blue px-3 py-2 text-sm font-medium text-white disabled:opacity-50">Save note</button>
+                    {adminNoteMessage && <span className="text-xs text-gray-500">{adminNoteMessage}</span>}
+                  </div>
+                  {internalNotes.length > 0 && (
+                    <ul className="mt-3 space-y-2">
+                      {internalNotes.map((entry) => <li key={entry.id} className="rounded border border-gray-100 p-2 text-sm text-gray-700"><p>{entry.note}</p><p className="mt-1 text-xs text-gray-400">{format(new Date(entry.created_at), 'PPp')}</p></li>)}
+                    </ul>
+                  )}
+                </section>
               </section>
               <section className="rounded-lg bg-white p-4 shadow-sm">
                 <h3 className="mb-2 text-sm font-semibold text-gray-500">Private mentor notes</h3>
@@ -245,7 +280,7 @@ export default function UserDetailPage() {
                 ) : (
                   <ul className="space-y-2">
                     {privateNotes.map((entry) => (
-                      <li key={entry.id} className="rounded border border-gray-100 p-3 text-sm">
+                      <li key={entry.id} className="rounded border border-amber-200 bg-amber-50 p-3 text-sm shadow-sm">
                         <div className="flex items-center justify-between gap-2">
                           <span className="capitalize text-xs font-medium text-gray-500">{entry.category.replace('_', ' ')}</span>
                           <span className="text-xs text-gray-400">{format(new Date(entry.created_at), 'PPp')}</span>

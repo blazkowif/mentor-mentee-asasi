@@ -36,6 +36,9 @@ export interface Database {
     channel: string | null
     profile_image: string | null
     motto: string | null
+    job_title: string | null
+    grade: string | null
+    ums_per: string | null
     created_at: string
   }
         Insert: Partial<Database['public']['Tables']['users']['Row']> & {
@@ -117,6 +120,8 @@ export interface Database {
           title: string
           content: string | null
           attachment: string | null
+          target_role: UserRole | null
+          target_student_id: string | null
           created_at: string
         }
         Insert: Partial<Database['public']['Tables']['announcements']['Row']> & {
@@ -142,6 +147,8 @@ export interface Database {
           due_date: string | null
           attachment: string | null
           priority: TaskPriority
+          target_role: UserRole | null
+          target_student_id: string | null
           created_at: string
         }
         Insert: Partial<Database['public']['Tables']['tasks']['Row']> & {
@@ -196,6 +203,8 @@ export interface Database {
           body: string | null
           is_read: boolean
           created_at: string
+          reference_type: string | null
+          reference_id: string | null
         }
         Insert: Partial<Database['public']['Tables']['notifications']['Row']> & {
           user_id: string
@@ -290,6 +299,77 @@ export interface Database {
           note: string
         }
         Update: Partial<Database['public']['Tables']['admin_follow_up_notes']['Row']>
+        Relationships: []
+      }
+      internal_staff_notes: {
+        Row: {
+          id: string
+          target_user_id: string
+          author_id: string
+          note: string
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['internal_staff_notes']['Row']> & {
+          target_user_id: string
+          author_id: string
+          note: string
+        }
+        Update: Partial<Database['public']['Tables']['internal_staff_notes']['Row']>
+        Relationships: []
+      }
+      meeting_tasks: {
+        Row: {
+          id: string
+          created_by: string
+          meeting_number: number
+          title: string
+          instructions: string | null
+          scheduled_start: string | null
+          scheduled_end: string | null
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['meeting_tasks']['Row']> & {
+          created_by: string
+          meeting_number: number
+          title: string
+        }
+        Update: Partial<Database['public']['Tables']['meeting_tasks']['Row']>
+        Relationships: []
+      }
+      meeting_assignments: {
+        Row: {
+          id: string
+          meeting_task_id: string
+          mentor_id: string
+          student_id: string
+          assigned_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['meeting_assignments']['Row']> & {
+          meeting_task_id: string
+          mentor_id: string
+          student_id: string
+        }
+        Update: Partial<Database['public']['Tables']['meeting_assignments']['Row']>
+        Relationships: []
+      }
+      meeting_reports: {
+        Row: {
+          id: string
+          meeting_assignment_id: string
+          mentor_id: string
+          student_id: string
+          overall_summary: string
+          needs_attention: boolean
+          attention_remark: string | null
+          completed_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['meeting_reports']['Row']> & {
+          meeting_assignment_id: string
+          mentor_id: string
+          student_id: string
+          overall_summary: string
+        }
+        Update: Partial<Database['public']['Tables']['meeting_reports']['Row']>
         Relationships: []
       }
     }

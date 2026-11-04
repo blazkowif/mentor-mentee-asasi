@@ -26,6 +26,9 @@ type UserPayload = {
   study_status?: string | null
   channel?: string | null
   motto?: string | null
+  job_title?: string | null
+  grade?: string | null
+  ums_per?: string | null
 }
 
 Deno.serve(async (request) => {
@@ -122,6 +125,9 @@ Deno.serve(async (request) => {
       study_status: user.study_status,
       channel: user.channel,
       motto: user.motto,
+      job_title: user.job_title,
+      grade: user.grade,
+      ums_per: user.ums_per,
     }
     if (action === 'update') {
       const { data: existingProfile, error: existingProfileError } = await admin
@@ -138,7 +144,7 @@ Deno.serve(async (request) => {
       }
     }
     const { data: profile, error: profileError } = await admin.from('users').upsert(profilePayload)
-      .select('id, role, matric_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, channel, motto, created_at').single()
+      .select('id, role, matric_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, channel, motto, job_title, grade, ums_per, created_at').single()
     if (profileError) throw profileError
     return json({ user: profile })
   } catch (error) {

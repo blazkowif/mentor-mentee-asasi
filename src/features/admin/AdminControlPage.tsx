@@ -1,6 +1,6 @@
-import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { useAuthStore } from '@/features/auth/authStore'
 import * as adminService from '@/services/adminService'
@@ -11,12 +11,14 @@ import type { Database } from '@/types/database.types'
 import { studentAuthEmail } from '@/services/authService'
 import AssignmentPage from './AssignmentPage'
 import LoadingButton from '@/components/LoadingButton'
+import * as mentorNotesService from '@/services/mentorNotesService'
+import MeetingSummary from '@/features/meetings/MeetingSummary'
 
 type Role = Database['public']['Enums']['user_role']
 type ImportField =
   | 'matric_number' | 'ic_number' | 'name' | 'email' | 'gender' | 'religion' | 'race'
   | 'phone' | 'programme' | 'channel' | 'address' | 'postcode' | 'city' | 'state'
-  | 'study_status' | 'mentor'
+  | 'study_status' | 'mentor' | 'job_title' | 'grade' | 'ums_per'
 type UserForm = {
   name: string
   role: Role
@@ -36,7 +38,16 @@ type UserForm = {
   state: string
   study_status: string
   motto: string
+  job_title: string
+  grade: string
+  ums_per: string
 }
+const PROGRAMME_OPTIONS = [
+  { code: 'UH0010001', name: 'Asasi Sains', english: 'Foundation in Science' },
+  { code: 'UH0010002', name: 'Asasi Teknologi Maklumat', english: 'Foundation in Information Technology' },
+  { code: 'UH0010003', name: 'Asasi Agrisains', english: 'Foundation in Agricultural Science' },
+  { code: 'UH0010004', name: 'Asasi Sains Sosial', english: 'Foundation in Social Science' },
+] as const
 
 const emptyForm: UserForm = {
   name: '',
@@ -57,11 +68,15 @@ const emptyForm: UserForm = {
   state: '',
   study_status: '',
   motto: '',
+  job_title: '',
+  grade: '',
+  ums_per: '',
 }
 const importFields: ImportField[] = [
   'matric_number', 'ic_number', 'name', 'email', 'gender', 'religion', 'race', 'phone',
   'programme', 'channel', 'address', 'postcode', 'city', 'state', 'study_status', 'mentor',
 ]
+const mentorImportFields: ImportField[] = ['name', 'job_title', 'grade', 'ums_per', 'email']
 const DELETE_STUDENTS_PHRASE = 'I-hereby-ending-this-session'
 const DELETE_MENTORS_PHRASE = 'I-hereby-ending-all-mentor-accounts'
 
@@ -70,8 +85,8 @@ export default function AdminControlPage() {
   const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
   const initialTab = searchParams.get('tab')
-  const [tab, setTab] = useState<'users' | 'assignment' | 'import' | 'content' | 'lists'>(
-    initialTab === 'assignment' || initialTab === 'import' || initialTab === 'content' || initialTab === 'lists' ? initialTab : 'users',
+  const [tab, setTab] = useState<'users' | 'assignment' | 'import' | 'content' | 'meetings' | 'lists'>(
+    initialTab === 'assignment' || initialTab === 'import' || initialTab === 'content' || initialTab === 'meetings' || initialTab === 'lists' ? initialTab : 'users',
   )
   const [form, setForm] = useState<UserForm>(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -134,6 +149,9 @@ export default function AdminControlPage() {
         state: form.state.trim() || undefined,
         study_status: form.study_status.trim() || undefined,
         motto: form.motto.trim() || undefined,
+        job_title: form.job_title.trim() || undefined,
+        grade: form.grade.trim() || undefined,
+        ums_per: form.ums_per.trim() || undefined,
       }
       return editingId
         ? adminService.updateManagedUser(editingId, payload)
@@ -201,6 +219,11 @@ export default function AdminControlPage() {
   }
 
   function editUser(user: adminService.UserRow) {
+    if (editingId === user.id) {
+      setEditingId(null)
+      setForm(emptyForm)
+      return
+    }
     setEditingId(user.id)
     setForm({
       name: user.name,
@@ -221,12 +244,18 @@ export default function AdminControlPage() {
       state: user.state ?? '',
       study_status: user.study_status ?? '',
       motto: user.motto ?? '',
+      job_title: user.job_title ?? '',
+      grade: user.grade ?? '',
+      ums_per: user.ums_per ?? '',
     })
     setTab('users')
   }
 
   function submitUser(event: FormEvent) {
     event.preventDefault()
+    if (editingId && !window.confirm(`Are you sure you want to save these changes to ${form.name}?`)) {
+      return
+    }
     setMessage(null)
     setError(null)
     saveUser.mutate()
@@ -244,6 +273,7 @@ export default function AdminControlPage() {
           ['assignment', 'Reassign mentors'],
           ['import', 'Excel import'],
           ['content', 'Tasks & announcements'],
+          ['meetings', 'Summary meeting'],
           ['lists', 'Mentor & Mentee List'],
         ] as const).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)} className={`px-3 py-2 text-sm font-medium ${tab === key ? 'border-b-2 border-ums-blue text-ums-blue' : 'text-gray-600'}`}>
@@ -272,19 +302,36 @@ export default function AdminControlPage() {
           <div className="rounded-lg bg-white p-4 shadow-sm">
             <div className="mb-4 flex gap-2">
               <input className="w-full rounded border border-gray-300 px-3 py-2 text-sm" placeholder="Search name, email, matric or staff ID" value={search} onChange={(event) => setSearch(event.target.value)} />
-              <button className="whitespace-nowrap rounded bg-gray-100 px-3 text-sm" onClick={() => { setEditingId(null); setForm(emptyForm) }}>New user</button>
             </div>
+            <p className="mb-4 rounded bg-blue-50 px-3 py-2 text-xs text-blue-800">
+              New student and mentor accounts must be added through the Excel import tab. Existing accounts can be edited below.
+            </p>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead><tr className="border-b text-xs text-gray-500"><th className="p-2">Name</th><th className="p-2">Role</th><th className="p-2">Login</th><th className="p-2">Actions</th></tr></thead>
                 <tbody className="divide-y">
                   {filteredUsers.map((user) => (
-                    <tr key={user.id}>
-                      <td className="p-2"><p className="font-medium">{user.name}</p><p className="text-xs text-gray-500">{user.matric_number ?? '—'}</p></td>
-                      <td className="p-2 capitalize">{user.role}</td>
-                      <td className="p-2 text-xs">{user.role === 'student' ? (user.matric_number ?? '—') : (user.email ?? '—')}</td>
-                      <td className="p-2"><div className="flex gap-2"><button className="text-ums-blue hover:underline" onClick={() => editUser(user)}>Edit</button><LoadingButton className="text-red-600 hover:underline" loading={deletingUserId === user.id} loadingLabel="Deleting…" disabled={user.id === currentUser?.id} onClick={() => { if (window.confirm(`Delete ${user.name}?`)) { setDeletingUserId(user.id); deleteUser.mutate(user.id, { onSettled: () => setDeletingUserId(null) }) } }}>Delete</LoadingButton></div></td>
-                    </tr>
+                    <Fragment key={user.id}>
+                      <tr>
+                        <td className="p-2"><Link to={user.role === 'student' ? `/admin/student/${user.id}` : `/admin/lecturer/${user.id}`} className="font-medium text-ums-blue hover:underline">{user.name}</Link><p className="text-xs text-gray-500">{user.matric_number ?? '—'}</p></td>
+                        <td className="p-2 capitalize">{user.role}</td>
+                        <td className="p-2 text-xs">{user.role === 'student' ? (user.matric_number ?? '—') : (user.email ?? '—')}</td>
+                        <td className="p-2"><div className="flex gap-2"><button className="text-ums-blue hover:underline" onClick={() => editUser(user)}>Edit</button><LoadingButton className="text-red-600 hover:underline" loading={deletingUserId === user.id} loadingLabel="Deleting…" disabled={user.id === currentUser?.id} onClick={() => { if (window.confirm(`Delete ${user.name}?`)) { setDeletingUserId(user.id); deleteUser.mutate(user.id, { onSettled: () => setDeletingUserId(null) }) } }}>Delete</LoadingButton></div></td>
+                      </tr>
+                      {editingId === user.id && (
+                        <tr key={`${user.id}-editor`}>
+                          <td colSpan={4} className="bg-slate-50 p-3">
+                            <InlineUserEditor
+                              form={form}
+                              updateForm={updateForm}
+                              onSubmit={submitUser}
+                              onCancel={() => { setEditingId(null); setForm(emptyForm) }}
+                              isSaving={saveUser.isPending}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -390,7 +437,7 @@ export default function AdminControlPage() {
               )}
             </div>
           </div>
-          <form onSubmit={submitUser} className="rounded-lg bg-white p-4 shadow-sm">
+          <form onSubmit={submitUser} className="hidden">
             <h2 className="mb-3 font-semibold">{editingId ? 'Edit user' : 'Add user'}</h2>
             <div className="space-y-3">
               <label className="block text-xs font-medium text-gray-600">Full name<input required className="mt-1 w-full rounded border px-3 py-2 text-sm" value={form.name} onChange={(event) => updateForm('name', event.target.value)} /></label>
@@ -436,6 +483,7 @@ export default function AdminControlPage() {
       {tab === 'assignment' && <AssignmentPage />}
       {tab === 'lists' && !usersQuery.isError && <ExportSection mentees={mentees} mentors={mentors} />}
       {tab === 'content' && <ContentManager users={users} tasks={tasksQuery.data ?? []} announcements={announcementsQuery.data ?? []} adminId={currentUser?.id ?? ''} onMessage={setMessage} onError={setError} />}
+      {tab === 'meetings' && <MeetingSummary />}
     </div>
   )
 }
@@ -457,14 +505,43 @@ function ExportSection({
   mentors: adminService.UserRow[]
 }) {
   const [view, setView] = useState<'mentees' | 'mentors' | 'groups'>('mentees')
+  const notesQuery = useQuery({
+    queryKey: ['admin', 'mentor-notes', 'all'],
+    queryFn: () => mentorNotesService.listMentorNotes(),
+  })
+  const flagsQuery = useQuery({
+    queryKey: ['admin', 'attention-flags', 'all'],
+    queryFn: () => mentorNotesService.listAttentionFlags(),
+  })
 
   const downloadRows = (rows: Record<string, unknown>[], filename: string, sheetName: string) => {
     const workbook = XLSX.utils.book_new()
     const worksheet = XLSX.utils.json_to_sheet(rows)
+    if (sheetName === 'Mentees') {
+      const headings = Object.keys(rows[0] ?? {})
+      rows.forEach((row, rowIndex) => {
+        if (!row['Attention Severity']) return
+        for (let columnIndex = 0; columnIndex < headings.length; columnIndex += 1) {
+          const cellAddress = XLSX.utils.encode_cell({ r: rowIndex + 1, c: columnIndex })
+          const cell = worksheet[cellAddress] as (XLSX.CellObject & { s?: Record<string, unknown> }) | undefined
+          if (cell) {
+            cell.s = {
+              fill: { patternType: 'solid', fgColor: { rgb: row['Attention Severity'] === 'urgent' ? 'FECACA' : 'FEE2E2' } },
+            }
+          }
+        }
+      })
+    }
     XLSX.utils.book_append_sheet(workbook, worksheet, sheetName)
-    XLSX.writeFile(workbook, filename)
+    XLSX.writeFile(workbook, filename, { cellStyles: true })
   }
 
+  const noteByStudent = new Map((notesQuery.data ?? []).map((note) => [note.student_id, note]))
+  const flagByStudent = new Map(
+    (flagsQuery.data ?? [])
+      .filter((flag) => ['open', 'acknowledged', 'in_progress'].includes(flag.status))
+      .map((flag) => [flag.student_id, flag]),
+  )
   const menteeRows = mentees
     .slice()
     .sort((left, right) => left.name.localeCompare(right.name))
@@ -474,6 +551,11 @@ function ExportSection({
       Programme: mentee.programme ?? '',
       'Mentor ID': mentee.mentor_id ?? '',
       Email: mentee.email ?? '',
+      'Has Mentor Note': noteByStudent.has(mentee.id) ? 'Yes' : 'No',
+      'Latest Mentor Note': noteByStudent.get(mentee.id)?.note ?? '',
+      'Attention Remark': flagByStudent.get(mentee.id)?.reason ?? '',
+      'Attention Severity': flagByStudent.get(mentee.id)?.severity ?? '',
+      'Attention Status': flagByStudent.get(mentee.id)?.status ?? '',
     }))
 
   const groupedRows = mentors
@@ -536,6 +618,7 @@ function ExportSection({
         <div>
         <h2 className="font-semibold text-gray-900">Download lists</h2>
         <p className="text-sm text-gray-500">Choose a list to view, then download the current list.</p>
+        <p className="text-xs text-gray-400">The mentee export includes the latest private note and active attention remark.</p>
         </div>
         <button
           type="button"
@@ -591,7 +674,101 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
   const [passwordColumn, setPasswordColumn] = useState('')
   const [importRole, setImportRole] = useState<Role>('student')
   const [importing, setImporting] = useState(false)
+  const cancelImportRequested = useRef(false)
   const [progress, setProgress] = useState({ current: 0, imported: 0, failed: 0 })
+  const [individualRole, setIndividualRole] = useState<Role>('lecturer')
+  const [individualForm, setIndividualForm] = useState({
+    name: '',
+    matric_number: '',
+    email: '',
+    password: '',
+    job_title: '',
+    grade: '',
+    ums_per: '',
+    programme: '',
+  })
+  const [savingIndividual, setSavingIndividual] = useState(false)
+  const [importMode, setImportMode] = useState<'excel' | 'individual'>('excel')
+
+  useEffect(() => {
+    if (!importing) return
+    const previousOverflow = document.body.style.overflow
+    const previousTouchAction = document.body.style.touchAction
+    document.body.style.overflow = 'hidden'
+    document.body.style.touchAction = 'none'
+    const warnBeforeLeave = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = 'An import is still running. Confirm to leave and cancel it.'
+    }
+    window.addEventListener('beforeunload', warnBeforeLeave)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.body.style.touchAction = previousTouchAction
+      window.removeEventListener('beforeunload', warnBeforeLeave)
+    }
+  }, [importing])
+
+  function requestImportCancel() {
+    if (!importing) return
+    if (window.confirm('Confirm to cancel the import? Completed rows will remain imported, but remaining rows will not be processed.')) {
+      cancelImportRequested.current = true
+    }
+  }
+
+  function updateIndividual(field: keyof typeof individualForm, value: string) {
+    setIndividualForm((previous) => ({ ...previous, [field]: value }))
+  }
+
+  async function addIndividualUser(event: FormEvent) {
+    event.preventDefault()
+    const name = individualForm.name.trim()
+    const password = individualForm.password.trim()
+    const matricNumber = individualForm.matric_number.trim()
+    const email = individualForm.email.trim()
+    const requiredMentorFields = [individualForm.job_title, individualForm.grade, individualForm.ums_per]
+    if (!name || password.length < 8) {
+      onError('Name and a password with at least 8 characters are required.')
+      return
+    }
+    if (individualRole === 'student' && !matricNumber) {
+      onError('NoMatrik is required for an individual student.')
+      return
+    }
+    if (individualRole === 'lecturer' && (!email || requiredMentorFields.some((value) => !value.trim()))) {
+      onError('Mentor accounts require Nama, Jawatan, Gred, UMS PER, and Email.')
+      return
+    }
+    setSavingIndividual(true)
+    try {
+      await adminService.createManagedUser({
+        name,
+        role: individualRole,
+        email: individualRole === 'lecturer' ? email : undefined,
+        password,
+        matric_number: individualRole === 'student' ? matricNumber : undefined,
+        programme: individualForm.programme.trim() || undefined,
+        job_title: individualRole === 'lecturer' ? individualForm.job_title.trim() : undefined,
+        grade: individualRole === 'lecturer' ? individualForm.grade.trim() : undefined,
+        ums_per: individualRole === 'lecturer' ? individualForm.ums_per.trim() : undefined,
+      })
+      setIndividualForm({
+        name: '',
+        matric_number: '',
+        email: '',
+        password: '',
+        job_title: '',
+        grade: '',
+        ums_per: '',
+        programme: '',
+      })
+      onComplete()
+      onMessage(`${individualRole === 'lecturer' ? 'Mentor' : 'Student'} account created successfully.`)
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Unable to create the account.')
+    } finally {
+      setSavingIndividual(false)
+    }
+  }
 
   async function readFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -621,8 +798,11 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
         state: ['negeri', 'state'],
         study_status: ['status pengajian', 'study status'],
         mentor: ['mentor'],
+        job_title: ['jawatan', 'job title', 'position'],
+        grade: ['gred', 'grade'],
+        ums_per: ['ums per', 'ums_per', 'ums perkhidmatan', 'per'],
       }
-      for (const field of importFields) {
+      for (const field of [...importFields, ...mentorImportFields]) {
         const accepted = aliases[field] ?? [field]
         const header = nextHeaders.find((value) => accepted.includes(value.trim().toLowerCase()))
         if (header) defaultMapping[field] = header
@@ -645,20 +825,26 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
         : 'Map Nama and Email before importing mentors.')
       return
     }
+    if (importRole === 'lecturer' && ['name', 'job_title', 'grade', 'ums_per', 'email'].some((field) => !mapping[field as ImportField])) {
+      onError('Map all required mentor columns: Nama, Jawatan, Gred, UMS Per, and Email. Programme is optional.')
+      return
+    }
     if (passwordMode === 'manual' && defaultPassword.trim().length < 8) {
       onError('Enter a manual password with at least 8 characters.')
       return
     }
     if (passwordMode === 'column' && !passwordColumn) {
-      onError('Choose the spreadsheet column that contains each student password.')
+      onError('Choose the spreadsheet column that contains each account password.')
       return
     }
     setImporting(true)
+    cancelImportRequested.current = false
     setProgress({ current: 0, imported: 0, failed: 0 })
     try {
       let imported = 0
       const failures: string[] = []
       for (const [index, row] of rows.entries()) {
+        if (cancelImportRequested.current) break
         const rowNumber = index + 2
         try {
           const name = row[nameColumn]?.trim()
@@ -705,6 +891,9 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
             state: mapping.state ? row[mapping.state] || undefined : undefined,
             study_status: mapping.study_status ? row[mapping.study_status] || undefined : undefined,
             channel: mapping.channel ? row[mapping.channel] || undefined : undefined,
+            job_title: mapping.job_title ? row[mapping.job_title] || undefined : undefined,
+            grade: mapping.grade ? row[mapping.grade] || undefined : undefined,
+            ums_per: mapping.ums_per ? row[mapping.ums_per] || undefined : undefined,
           })
           imported += 1
         } catch (err) {
@@ -717,7 +906,12 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
           }))
         }
       }
+      const wasCancelled = cancelImportRequested.current
       onComplete()
+      if (wasCancelled) {
+        onError(`${imported} of ${rows.length} rows imported before the import was cancelled.`)
+        return
+      }
       if (failures.length) {
         onError(`${imported} of ${rows.length} imported. Failed rows:\n${failures.slice(0, 10).join('\n')}${failures.length > 10 ? `\n…and ${failures.length - 10} more.` : ''}`)
       } else {
@@ -732,9 +926,68 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
 
   return <section className="max-w-3xl rounded-lg bg-white p-5 shadow-sm">
     <h2 className="font-semibold">Import students or mentors from Excel</h2>
-    <p className="mb-4 text-sm text-gray-500">Upload a spreadsheet, choose the account type, confirm the detected columns, and edit any mapping that is incorrect. Student login emails are generated from Nomatrik; mentor imports require an email column for staff login.</p>
-    <input type="file" accept=".xlsx,.xls,.csv" onChange={readFile} className="mb-4 block text-sm" />
-    {headers.length > 0 && <div className="space-y-3">
+    <p className="mb-4 text-sm text-gray-500">Upload a spreadsheet, choose the account type, confirm the detected columns, and edit any mapping that is incorrect. Student login emails are generated from Nomatrik. Mentor imports use only Nama, Jawatan, Gred, UMS Per, and Email; the chosen password is used for every imported mentor.</p>
+    <div className="mb-4 flex gap-2 border-b border-gray-200 pb-3">
+      <button type="button" onClick={() => setImportMode('excel')} className={`rounded px-3 py-2 text-sm font-medium ${importMode === 'excel' ? 'bg-ums-blue text-white' : 'bg-gray-100 text-gray-700'}`}>
+        Import Excel
+      </button>
+      <button type="button" onClick={() => setImportMode('individual')} className={`rounded px-3 py-2 text-sm font-medium ${importMode === 'individual' ? 'bg-ums-blue text-white' : 'bg-gray-100 text-gray-700'}`}>
+        Add one account
+      </button>
+    </div>
+    {importMode === 'individual' && <form onSubmit={addIndividualUser} className="mb-5 rounded border border-blue-100 bg-blue-50 p-4">
+      <h3 className="font-semibold text-blue-900">Add one account</h3>
+      <p className="mb-3 text-xs text-blue-800">This form works without uploading an Excel file. Use Excel import below for multiple accounts.</p>
+      <div className="mb-3 grid gap-3 sm:grid-cols-2">
+        <label className="text-xs font-medium text-gray-700">Account type
+          <select className="mt-1 w-full rounded border px-3 py-2 text-sm" value={individualRole} onChange={(event) => setIndividualRole(event.target.value as Role)}>
+            <option value="lecturer">Mentor / lecturer</option>
+            <option value="student">Student</option>
+          </select>
+        </label>
+        <label className="text-xs font-medium text-gray-700">Nama *
+          <input required className="mt-1 w-full rounded border px-3 py-2 text-sm" value={individualForm.name} onChange={(event) => updateIndividual('name', event.target.value)} />
+        </label>
+        {individualRole === 'lecturer' ? (
+          <>
+            <label className="text-xs font-medium text-gray-700">Jawatan *
+              <input required className="mt-1 w-full rounded border px-3 py-2 text-sm" value={individualForm.job_title} onChange={(event) => updateIndividual('job_title', event.target.value)} />
+            </label>
+            <label className="text-xs font-medium text-gray-700">Gred *
+              <input required className="mt-1 w-full rounded border px-3 py-2 text-sm" value={individualForm.grade} onChange={(event) => updateIndividual('grade', event.target.value)} />
+            </label>
+            <label className="text-xs font-medium text-gray-700">UMS PER *
+              <input required className="mt-1 w-full rounded border px-3 py-2 text-sm" value={individualForm.ums_per} onChange={(event) => updateIndividual('ums_per', event.target.value)} />
+            </label>
+            <label className="text-xs font-medium text-gray-700">Email *
+              <input required type="email" className="mt-1 w-full rounded border px-3 py-2 text-sm" value={individualForm.email} onChange={(event) => updateIndividual('email', event.target.value)} />
+            </label>
+          </>
+        ) : (
+          <>
+            <label className="text-xs font-medium text-gray-700">NoMatrik *
+              <input required className="mt-1 w-full rounded border px-3 py-2 text-sm" value={individualForm.matric_number} onChange={(event) => updateIndividual('matric_number', event.target.value)} />
+            </label>
+            <label className="text-xs font-medium text-gray-700">Programme
+              <select className="mt-1 w-full rounded border px-3 py-2 text-sm" value={individualForm.programme} onChange={(event) => updateIndividual('programme', event.target.value)}>
+                <option value="">Select programme</option>
+                {PROGRAMME_OPTIONS.map((programme) => (
+                  <option key={programme.code} value={programme.code}>{programme.code} · {programme.name} · {programme.english}</option>
+                ))}
+              </select>
+            </label>
+          </>
+        )}
+        <label className="text-xs font-medium text-gray-700">Password *
+          <input required minLength={8} type="password" className="mt-1 w-full rounded border px-3 py-2 text-sm" value={individualForm.password} onChange={(event) => updateIndividual('password', event.target.value)} placeholder="Minimum 8 characters" />
+        </label>
+      </div>
+      <button type="submit" disabled={savingIndividual} className="rounded bg-ums-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+        {savingIndividual ? 'Creating account…' : 'Add account'}
+      </button>
+    </form>}
+    {importMode === 'excel' && <input type="file" accept=".xlsx,.xls,.csv" onChange={readFile} className="mb-4 block text-sm" />}
+    {importMode === 'excel' && headers.length > 0 && <div className="space-y-3">
       <label className="block text-sm font-medium text-gray-700">Import account type
         <select className="mt-1 w-full rounded border px-3 py-2" value={importRole} onChange={(event) => setImportRole(event.target.value as Role)}>
           <option value="student">Students</option>
@@ -763,9 +1016,9 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
         <p className="mb-2 text-sm font-medium text-gray-700">Column mapping</p>
         <p className="mb-3 text-xs text-gray-500">The suggested mapping is based on the headers in your file. Select a different header whenever a column name is wrong or ambiguous.</p>
         <div className="grid gap-2 sm:grid-cols-2">
-          {importFields.map((field) => (
+          {(importRole === 'lecturer' ? mentorImportFields : importFields).map((field) => (
             <label key={field} className="text-sm">
-              <span className="mb-1 block text-xs font-medium text-gray-600">{fieldLabel(field)}{((importRole === 'student' && field === 'matric_number') || (importRole === 'lecturer' && field === 'email') || field === 'name') && <span className="text-red-600"> *</span>}</span>
+              <span className="mb-1 block text-xs font-medium text-gray-600">{fieldLabel(field)}{((importRole === 'student' && field === 'matric_number') || (importRole === 'lecturer' && ['name', 'job_title', 'grade', 'ums_per', 'email'].includes(field)) || field === 'name') && <span className="text-red-600"> *</span>}</span>
               <select className="w-full rounded border px-2 py-1.5" value={mapping[field] ?? ''} onChange={(event) => setMapping((previous) => ({ ...previous, [field]: event.target.value || undefined }))}>
                 <option value="">Do not import</option>
                 {headers.map((header) => <option key={header} value={header}>{header}</option>)}
@@ -774,11 +1027,11 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
           ))}
         </div>
       </div>
-      <div className="overflow-x-auto rounded border border-gray-200">
+      <div className="max-h-96 overflow-auto rounded border border-gray-200">
         <table className="w-full min-w-[620px] text-left text-xs">
-          <thead className="bg-gray-50 text-gray-500"><tr><th className="p-2">Row</th><th className="p-2">Nomatrik</th><th className="p-2">Nama</th><th className="p-2">Programme</th><th className="p-2">Password</th></tr></thead>
+          <thead className="sticky top-0 bg-gray-50 text-gray-500"><tr><th className="p-2">Row</th><th className="p-2">{importRole === 'lecturer' ? 'UMS PER' : 'NoMatrik'}</th><th className="p-2">Nama</th><th className="p-2">{importRole === 'lecturer' ? 'Jawatan' : 'Programme'}</th><th className="p-2">Password</th></tr></thead>
           <tbody className="divide-y">
-            {rows.slice(0, 5).map((row, index) => <tr key={index}><td className="p-2">{index + 2}</td><td className="p-2">{mapping.matric_number ? row[mapping.matric_number] : '—'}</td><td className="p-2">{mapping.name ? row[mapping.name] : '—'}</td><td className="p-2">{mapping.programme ? row[mapping.programme] : '—'}</td><td className="p-2">{passwordMode === 'column' && passwordColumn ? (row[passwordColumn] ? 'Ready' : defaultPassword ? 'Fallback' : 'Missing') : defaultPassword ? 'Manual' : 'Missing'}</td></tr>)}
+            {rows.map((row, index) => <tr key={index}><td className="p-2">{index + 2}</td><td className="p-2">{importRole === 'lecturer' ? (mapping.ums_per ? row[mapping.ums_per] : '—') : (mapping.matric_number ? row[mapping.matric_number] : '—')}</td><td className="p-2">{mapping.name ? row[mapping.name] : '—'}</td><td className="p-2">{importRole === 'lecturer' ? (mapping.job_title ? row[mapping.job_title] : '—') : (mapping.programme ? row[mapping.programme] : '—')}</td><td className="p-2">{passwordMode === 'column' && passwordColumn ? (row[passwordColumn] ? 'Ready' : defaultPassword ? 'Fallback' : 'Missing') : defaultPassword ? 'Manual' : 'Missing'}</td></tr>)}
           </tbody>
         </table>
       </div>
@@ -791,6 +1044,9 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
           <div className="h-2 overflow-hidden rounded-full bg-blue-100">
             <div className="h-full rounded-full bg-ums-blue transition-all" style={{ width: `${rows.length ? (progress.current / rows.length) * 100 : 0}%` }} />
           </div>
+          <button type="button" onClick={requestImportCancel} className="mt-3 rounded border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
+            Force cancel import
+          </button>
         </div>
       )}
       <button disabled={importing || rows.length === 0} onClick={importUsers} className="rounded bg-ums-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{importing ? `Importing ${rows.length} accounts…` : `Import ${rows.length} ${importRole === 'student' ? 'students' : 'mentors'}`}</button>
@@ -816,8 +1072,80 @@ function fieldLabel(field: ImportField) {
     state: 'Negeri',
     study_status: 'Study status',
     mentor: 'Mentor',
+    job_title: 'Jawatan',
+    grade: 'Gred',
+    ums_per: 'UMS Per',
   }
   return labels[field]
+}
+
+function InlineUserEditor({
+  form,
+  updateForm,
+  onSubmit,
+  onCancel,
+  isSaving,
+}: {
+  form: UserForm
+  updateForm: (field: keyof UserForm, value: string) => void
+  onSubmit: (event: FormEvent) => void
+  onCancel: () => void
+  isSaving: boolean
+}) {
+  return (
+    <div className="rounded-lg border border-blue-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900">Edit user details</h3>
+          <p className="text-xs text-gray-500">Update the account fields below, then confirm before saving.</p>
+        </div>
+        <button type="button" onClick={onCancel} className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100">Close</button>
+      </div>
+      <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-3">
+        <label className="min-w-40 flex-1 text-xs font-medium text-gray-600">
+          Full name
+          <input required className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" value={form.name} onChange={(event) => updateForm('name', event.target.value)} />
+        </label>
+        <label className="min-w-32 text-xs font-medium text-gray-600">
+          Role
+          <select className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" value={form.role} onChange={(event) => updateForm('role', event.target.value as Role)}>
+            <option value="student">Student</option>
+            <option value="lecturer">Lecturer</option>
+            <option value="admin">Admin</option>
+          </select>
+        </label>
+        <label className="min-w-48 flex-1 text-xs font-medium text-gray-600">
+          Email
+          <input type="email" className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" value={form.email} onChange={(event) => updateForm('email', event.target.value)} />
+        </label>
+        <label className="min-w-40 flex-1 text-xs font-medium text-gray-600">
+          New password
+          <input minLength={8} type="password" className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" value={form.password} onChange={(event) => updateForm('password', event.target.value)} placeholder="Leave blank to keep" />
+        </label>
+        <label className="min-w-36 flex-1 text-xs font-medium text-gray-600">
+          Matric / staff ID
+          <input className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" value={form.matric_number} onChange={(event) => updateForm('matric_number', event.target.value)} />
+        </label>
+        <label className="min-w-40 flex-1 text-xs font-medium text-gray-600">
+          Programme
+          <select className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" value={form.programme} onChange={(event) => updateForm('programme', event.target.value)}>
+            <option value="">Select programme</option>
+            {PROGRAMME_OPTIONS.map((programme) => (
+              <option key={programme.code} value={programme.code}>{programme.code} · {programme.name} · {programme.english}</option>
+            ))}
+          </select>
+        </label>
+        <label className="min-w-36 flex-1 text-xs font-medium text-gray-600">
+          Phone
+          <input className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" value={form.phone} onChange={(event) => updateForm('phone', event.target.value)} />
+        </label>
+        <div className="flex gap-2">
+          <button type="submit" disabled={isSaving} className="rounded bg-ums-blue px-4 py-2 text-sm font-medium text-white hover:bg-ums-blue-light disabled:opacity-50">{isSaving ? 'Saving…' : 'Save changes'}</button>
+          <button type="button" onClick={onCancel} className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+        </div>
+      </form>
+    </div>
+  )
 }
 
 function ContentManager({ users, tasks, announcements, adminId, onMessage, onError }: { users: adminService.UserRow[]; tasks: Awaited<ReturnType<typeof adminService.listAllTasks>>; announcements: Awaited<ReturnType<typeof adminService.listAllAnnouncements>>; adminId: string; onMessage: (value: string) => void; onError: (value: string) => void }) {
@@ -843,6 +1171,7 @@ function ContentManager({ users, tasks, announcements, adminId, onMessage, onErr
       onMessage('Assignment created.')
     } catch (err) { onError(err instanceof Error ? err.message : 'Unable to create assignment.') } finally { setBusy(false) }
   }
+
   async function createAnnouncement() {
     if (!title.trim()) return
     setBusy(true)

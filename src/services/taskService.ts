@@ -17,11 +17,11 @@ export async function listTasksByLecturer(lecturerId: string): Promise<Task[]> {
 }
 
 // Student view — tasks set by their mentor.
-export async function listTasksByMentor(mentorId: string): Promise<Task[]> {
+export async function listTasksByMentor(mentorId: string, studentId?: string): Promise<Task[]> {
   const { data, error } = await supabase
     .from('tasks')
     .select('*')
-    .eq('lecturer_id', mentorId)
+    .or(`lecturer_id.eq.${mentorId}${studentId ? `,target_student_id.eq.${studentId}` : ''}`)
     .order('due_date', { ascending: true })
   if (error) throw error
   return data

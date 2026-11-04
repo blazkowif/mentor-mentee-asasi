@@ -72,6 +72,11 @@ npm run dev
   private synthetic email internally because its password API requires one,
   but students and administrators only see and enter the matric number.
   A progress indicator reports imported and failed rows.
+- **Mentor meetings** — administrators can create numbered meeting tasks from
+  the Tasks page, mentors assign each meeting to their mentees, and record an
+  overall meeting summary plus an immediate-attention remark. Administrators
+  can review the compiled **Summary meeting** section and use **Download formal
+  PDF** to open a print-ready formal report and save it as PDF.
 - **Supabase layer** — full schema, indexes, helper functions, and RLS
   policies for all 8 tables (`supabase/migrations/0001_init.sql`), storage
   buckets + path-scoped policies for all 5 buckets (`0002_storage.sql`).
