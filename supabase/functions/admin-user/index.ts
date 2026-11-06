@@ -57,11 +57,7 @@ Deno.serve(async (request) => {
       if (user?.confirmation !== 'I-hereby-ending-this-session') {
         throw new Error('The exact confirmation phrase is required.')
       }
-      const { data: students, error: studentsError } = await admin
-        .from('users')
-        .select('id')
-        .eq('role', 'student')
-      if (studentsError) throw studentsError
+      const students = await listUserIdsByRole(admin, 'student')
       const result = await deleteAccounts(admin, students ?? [])
       return json({ ok: result.failed.length === 0, ...result })
     }
@@ -69,11 +65,7 @@ Deno.serve(async (request) => {
       if (user?.confirmation !== 'I-hereby-ending-all-mentor-accounts') {
         throw new Error('The exact confirmation phrase is required.')
       }
-      const { data: mentors, error: mentorsError } = await admin
-        .from('users')
-        .select('id')
-        .eq('role', 'lecturer')
-      if (mentorsError) throw mentorsError
+      const mentors = await listUserIdsByRole(admin, 'lecturer')
       const result = await deleteAccounts(admin, mentors ?? [])
       return json({ ok: result.failed.length === 0, ...result })
     }
@@ -232,4 +224,23 @@ async function deleteAccounts(
     deleted += 1
   }
   return { deleted, failed }
+}
+
+async function listUserIdsByRole(
+  admin: ReturnType<typeof createClient>,
+  role: 'student' | 'lecturer',
+) {
+  const pageSize = 1000
+  const accounts: Array<{ id: string }> = []
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await admin
+      .from('users')
+      .select('id')
+      .eq('role', role)
+      .range(offset, offset + pageSize - 1)
+    if (error) throw error
+    const page = data ?? []
+    accounts.push(...page)
+    if (page.length < pageSize) return accounts
+  }
 }

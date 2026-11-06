@@ -6,6 +6,9 @@ import * as adminService from '@/services/adminService'
 import { queryKeys } from '@/lib/queryKeys'
 
 type Programme = 'UH0010001' | 'UH0010002' | 'UH0010003' | 'UH0010004' | 'all'
+type SummaryView = 'students' | 'lecturers' | 'admins' | 'unassigned'
+type SortField = 'name' | 'matric'
+type SortDirection = 'asc' | 'desc'
 type ImportMatch = {
   row: number
   student: adminService.UserRow | null
@@ -66,6 +69,10 @@ function bestMatch(value: string, candidates: adminService.UserRow[]) {
 export default function AssignmentPage() {
   const [programme, setProgramme] = useState<Programme>('all')
   const [search, setSearch] = useState('')
+  const [summaryView, setSummaryView] = useState<SummaryView>('students')
+  const [mentorFilter, setMentorFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
+  const [sortField, setSortField] = useState<SortField>('name')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [page, setPage] = useState(1)
   const pageSize = 50
@@ -91,6 +98,10 @@ export default function AssignmentPage() {
   const { data: allStudents = [], isLoading: allStudentsLoading } = useQuery({
     queryKey: queryKeys.admin.students(),
     queryFn: () => adminService.getStudentsByProgramme(),
+  })
+  const { data: allUsers = [], isLoading: allUsersLoading } = useQuery({
+    queryKey: queryKeys.users.all(),
+    queryFn: adminService.listAllUsers,
   })
   const {
     data: mentors = [],
@@ -210,21 +221,29 @@ export default function AssignmentPage() {
   }
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return students
-    return students.filter(
+    const mentorFiltered = mentorFilter === 'all'
+      ? students
+      : students.filter((student) => mentorFilter === 'unassigned' ? !student.mentor_id : Boolean(student.mentor_id))
+    const searched = !q ? mentorFiltered : mentorFiltered.filter(
       (s) =>
         s.name.toLowerCase().includes(q) ||
         (s.matric_number ?? '').toLowerCase().includes(q) ||
         (s.email ?? '').toLowerCase().includes(q),
     )
-  }, [students, search])
+    return [...searched].sort((left, right) => {
+      const leftValue = sortField === 'name' ? left.name : (left.matric_number ?? '')
+      const rightValue = sortField === 'name' ? right.name : (right.matric_number ?? '')
+      const result = leftValue.localeCompare(rightValue, undefined, { numeric: true, sensitivity: 'base' })
+      return sortDirection === 'asc' ? result : -result
+    })
+  }, [students, search, mentorFilter, sortDirection, sortField])
 
   const pageStudents = useMemo(
     () => filtered.slice((page - 1) * pageSize, page * pageSize),
     [filtered, page],
   )
 
-  if (studentsLoading || mentorsLoading || allStudentsLoading) {
+  if (studentsLoading || mentorsLoading || allStudentsLoading || allUsersLoading) {
     return <p className="text-sm text-gray-500">Loading…</p>
   }
 
@@ -238,11 +257,65 @@ export default function AssignmentPage() {
   const isAllSelected =
     filtered.length > 0 && filtered.every((s) => selectedIds.has(s.id))
 
-  const unassignedCount = students.filter((s) => !s.mentor_id).length
+  const unassignedCount = allStudents.filter((s) => !s.mentor_id).length
+  const lecturerUsers = allUsers.filter((user) => user.role === 'lecturer')
+  const adminUsers = allUsers.filter((user) => user.role === 'admin')
+  const setSort = (field: SortField) => {
+    if (sortField === field) setSortDirection((direction) => direction === 'asc' ? 'desc' : 'asc')
+    else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
 
   return (
     <div>
       <h1 className="mb-4 text-lg font-semibold text-gray-900">Assignment</h1>
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {([
+          ['students', 'Students', allStudents.length, 'View all students'],
+          ['lecturers', 'Lecturers', lecturerUsers.length, 'View all lecturers'],
+          ['admins', 'Administrators', adminUsers.length, 'View all administrators'],
+          ['unassigned', 'Unassigned students', unassignedCount, 'View unassigned students'],
+        ] as const).map(([view, label, count, help]) => (
+          <button
+            key={view}
+            type="button"
+            onClick={() => {
+              setSummaryView(view)
+              if (view === 'unassigned') setMentorFilter('unassigned')
+              else if (view === 'students') setMentorFilter('all')
+            }}
+            className={`rounded-lg border p-4 text-left shadow-sm transition ${summaryView === view ? 'border-ums-blue bg-blue-50 ring-1 ring-ums-blue' : 'border-gray-200 bg-white hover:border-blue-300'}`}
+          >
+            <span className="block text-xs font-medium text-gray-500">{label}</span>
+            <span className="mt-1 block text-2xl font-semibold text-gray-900">{count}</span>
+            <span className="mt-1 block text-xs text-gray-500">{help}</span>
+          </button>
+        ))}
+      </div>
+      {(summaryView === 'lecturers' || summaryView === 'admins') && (
+        <div className="mb-4 overflow-x-auto rounded-lg bg-white shadow-sm">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-gray-100 text-xs text-gray-400">
+              <tr><th className="p-3">Name</th><th className="p-3">Email</th><th className="p-3">Role</th></tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {(summaryView === 'lecturers' ? lecturerUsers : adminUsers).map((user) => (
+                <tr key={user.id}>
+                  <td className="p-3 font-medium">
+                    {user.role === 'lecturer' ? (
+                      <Link to={`/admin/lecturer/${user.id}`} className="text-ums-blue hover:underline">{user.name}</Link>
+                    ) : user.name}
+                  </td>
+                  <td className="p-3 text-gray-600">{user.email ?? '—'}</td>
+                  <td className="p-3 capitalize text-gray-600">{user.role}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {error && <p className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -253,6 +326,7 @@ export default function AssignmentPage() {
               setProgramme(p)
               setPage(1)
               setSelectedIds(new Set())
+              setSummaryView('students')
             }}
             className={`rounded-full px-3 py-1.5 text-xs font-medium ${programme === p ? 'bg-ums-blue text-white' : 'bg-white text-gray-700'}`}
           >
@@ -268,9 +342,18 @@ export default function AssignmentPage() {
       </div>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm text-gray-600">
-          {filtered.length} students · {unassignedCount} unassigned
+        <div className="flex flex-wrap gap-2 text-sm">
+          {([
+            ['all', 'All mentors'],
+            ['unassigned', 'Unassigned mentor'],
+            ['assigned', 'Assigned mentor'],
+          ] as const).map(([value, label]) => (
+            <button key={value} type="button" onClick={() => { setMentorFilter(value); setSummaryView(value === 'unassigned' ? 'unassigned' : 'students') }} className={`rounded-full border px-3 py-1 ${mentorFilter === value ? 'border-ums-blue bg-blue-50 text-ums-blue' : 'border-gray-200 text-gray-600 hover:border-blue-300'}`}>
+              {label}
+            </button>
+          ))}
         </div>
+        <div className="text-sm text-gray-600">{filtered.length} students · {unassignedCount} unassigned</div>
 
         <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-4">
           <h2 className="text-sm font-semibold text-blue-900">Import student–mentor assignments</h2>
@@ -359,8 +442,8 @@ export default function AssignmentPage() {
                       }}
                     />
                   </th>
-                  <th className="py-2 font-medium">Name</th>
-                  <th className="py-2 font-medium">Matric</th>
+                  <th className="py-2 font-medium"><button type="button" onClick={() => setSort('name')} className="hover:text-ums-blue">Name {sortField === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</button></th>
+                  <th className="py-2 font-medium"><button type="button" onClick={() => setSort('matric')} className="hover:text-ums-blue">Matric {sortField === 'matric' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</button></th>
                   <th className="py-2 font-medium">Programme</th>
                   <th className="py-2 font-medium">Mentor</th>
                 </tr>

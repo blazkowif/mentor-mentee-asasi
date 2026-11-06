@@ -76,9 +76,21 @@ export async function updateProfile(userId: string, patch: ProfilePatch) {
 // --- Admin only (guarded by RLS server-side; UI should also hide these) ---
 
 export async function listAllUsers(): Promise<UserRow[]> {
-  const { data, error } = await supabase.from('users').select(SAFE_USER_FIELDS).order('role').order('name')
-  if (error) throw error
-  return data
+  const pageSize = 1000
+  const users: UserRow[] = []
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase
+      .from('users')
+      .select(SAFE_USER_FIELDS)
+      .order('role')
+      .order('name')
+      .order('id')
+      .range(offset, offset + pageSize - 1)
+    if (error) throw error
+    const page = data ?? []
+    users.push(...page)
+    if (page.length < pageSize) return users
+  }
 }
 
 export async function assignMentor(studentId: string, mentorId: string | null) {

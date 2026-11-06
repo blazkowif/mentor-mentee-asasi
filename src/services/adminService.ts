@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/types/database.types'
+import { withRetry } from '@/features/admin/importUtils'
 
 export type UserRow = Omit<Database['public']['Tables']['users']['Row'], 'ic_number'> & {
   ic_number?: string | null
@@ -60,40 +61,61 @@ async function selectUsersWithSchemaFallback(
 }
 
 export async function listAllUsers(): Promise<UserRow[]> {
-  const { data, error } = await selectUsersWithSchemaFallback((fields) => supabase
-    .from('users')
-    .select(fields)
+  const pageSize = 1000
+  const users: UserRow[] = []
+  for (let offset = 0; ; offset += pageSize) {
+    const result = await selectUsersWithSchemaFallback((fields) => supabase
+      .from('users')
+      .select(fields)
       .order('role')
       .order('name')
-      .limit(2000) as unknown as UserQueryBuilder)
-  if (error) throw new Error(error.message)
-  return data ?? []
+      .order('id')
+      .range(offset, offset + pageSize - 1) as unknown as UserQueryBuilder)
+    if (result.error) throw new Error(result.error.message)
+    const page = result.data ?? []
+    users.push(...page)
+    if (page.length < pageSize) return users
+  }
 }
 
 export async function getStudentsByProgramme(programme?: string): Promise<UserRow[]> {
-  const { data, error } = await selectUsersWithSchemaFallback((fields) => {
-    let q = supabase
-    .from('users')
-    .select(fields)
-    .eq('role', 'student')
-    .order('name')
-      .limit(2000)
-    if (programme) q = q.eq('programme', programme)
-    return q as unknown as UserQueryBuilder
-  })
-  if (error) throw new Error(error.message)
-  return data ?? []
+  const pageSize = 1000
+  const students: UserRow[] = []
+  for (let offset = 0; ; offset += pageSize) {
+    const result = await selectUsersWithSchemaFallback((fields) => {
+      let q = supabase
+        .from('users')
+        .select(fields)
+        .eq('role', 'student')
+        .order('name')
+        .order('id')
+        .range(offset, offset + pageSize - 1)
+      if (programme) q = q.eq('programme', programme)
+      return q as unknown as UserQueryBuilder
+    })
+    if (result.error) throw new Error(result.error.message)
+    const page = result.data ?? []
+    students.push(...page)
+    if (page.length < pageSize) return students
+  }
 }
 
 export async function getAvailableMentors(): Promise<UserRow[]> {
-  const { data, error } = await selectUsersWithSchemaFallback((fields) => supabase
-    .from('users')
-    .select(fields)
-    .eq('role', 'lecturer')
-    .order('name')
-      .limit(2000) as unknown as UserQueryBuilder)
-  if (error) throw new Error(error.message)
-  return data ?? []
+  const pageSize = 1000
+  const mentors: UserRow[] = []
+  for (let offset = 0; ; offset += pageSize) {
+    const result = await selectUsersWithSchemaFallback((fields) => supabase
+      .from('users')
+      .select(fields)
+      .eq('role', 'lecturer')
+      .order('name')
+      .order('id')
+      .range(offset, offset + pageSize - 1) as unknown as UserQueryBuilder)
+    if (result.error) throw new Error(result.error.message)
+    const page = result.data ?? []
+    mentors.push(...page)
+    if (page.length < pageSize) return mentors
+  }
 }
 
 export async function searchUsers(query: string): Promise<UserRow[]> {
@@ -166,18 +188,28 @@ async function invokeAuthAdmin(
   })
   if (error) {
     let message = error.message
+    const response = (error as { context?: Response }).context
     try {
-      const response = (error as { context?: Response }).context
       if (response) {
         const body = await response.json() as { error?: string }
         if (body.error) message = body.error
       }
+
     } catch {
       // Keep Supabase's original error when the function response is not JSON.
     }
-    throw new Error(message)
+    const wrapped = new Error(message) as Error & { status?: number }
+    wrapped.status = response?.status
+    throw wrapped
   }
   return data as { user?: UserRow; deleted?: number; failed?: Array<{ id: string; error: string }> }
+}
+
+function functionErrorStatus(error: unknown) {
+  const status = (error as { status?: number }).status
+  if (status !== undefined) return status
+  const response = (error as { context?: Response }).context
+  return response?.status
 }
 
 export async function createManagedUser(user: UserInput): Promise<UserRow> {
@@ -186,10 +218,26 @@ export async function createManagedUser(user: UserInput): Promise<UserRow> {
   return result.user
 }
 
+export async function createManagedUserWithRetry(user: UserInput, findExisting: () => Promise<UserRow | null>) {
+  return withRetry(
+    () => createManagedUser(user),
+    findExisting,
+    functionErrorStatus,
+  )
+}
+
 export async function updateManagedUser(id: string, user: Partial<UserInput>): Promise<UserRow> {
   const result = await invokeAuthAdmin('update', { ...user, id })
   if (!result.user) throw new Error('Admin function did not return the updated user.')
   return result.user
+}
+
+export async function updateManagedUserWithRetry(id: string, user: Partial<UserInput>, findExisting: () => Promise<UserRow | null>) {
+  return withRetry(
+    () => updateManagedUser(id, user),
+    findExisting,
+    functionErrorStatus,
+  )
 }
 
 export async function deleteManagedUser(id: string) {

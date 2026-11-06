@@ -445,6 +445,14 @@ workflow uses `Nomatrik` as the student login ID. Supabase Auth receives a
 private synthetic email internally because its password API requires one; that
 implementation value is not the student's login ID.
 
+Bulk imports run a dry-run validation before committing rows. The importer
+preloads existing users and mentors, processes work through six bounded
+workers, retries only transient 429/5xx Edge Function failures after an
+existence re-check, and processes mentor rows before student rows. Invalid
+rows are skipped and can be downloaded as a CSV for correction. Re-importing
+the same matric number or mentor email updates the existing account instead of
+creating a duplicate.
+
 ## 11. Setup and deployment
 
 ### Local frontend setup

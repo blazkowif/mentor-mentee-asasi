@@ -8,7 +8,7 @@ import * as taskService from '@/services/taskService'
 import * as announcementService from '@/services/announcementService'
 import { queryKeys } from '@/lib/queryKeys'
 import type { Database } from '@/types/database.types'
-import { studentAuthEmail } from '@/services/authService'
+import { IMPORT_WORKER_COUNT, runWithConcurrency, validateImportRows, type ImportValidationRow } from './importUtils'
 import AssignmentPage from './AssignmentPage'
 import LoadingButton from '@/components/LoadingButton'
 import * as mentorNotesService from '@/services/mentorNotesService'
@@ -116,8 +116,6 @@ export default function AdminControlPage() {
   const users = usersQuery.data ?? []
   const studentCount = users.filter((user) => user.role === 'student').length
   const mentorCount = users.filter((user) => user.role === 'lecturer').length
-  const adminCount = users.filter((user) => user.role === 'admin').length
-  const unassignedStudentCount = users.filter((user) => user.role === 'student' && !user.mentor_id).length
   const students = users.filter((user) => user.role === 'student')
   const mentors = users.filter((user) => user.role === 'lecturer')
   const staff = users.filter((user) => user.role !== 'student')
@@ -292,14 +290,6 @@ export default function AdminControlPage() {
           Could not load users: {usersQuery.error instanceof Error ? usersQuery.error.message : 'Supabase returned an unknown error.'}
           Check that the logged-in profile exists in public.users and has role admin.
         </p>
-      )}
-      {!usersQuery.isError && (
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatisticCard label="Students" value={studentCount} />
-          <StatisticCard label="Lecturers" value={mentorCount} />
-          <StatisticCard label="Administrators" value={adminCount} />
-          <StatisticCard label="Unassigned students" value={unassignedStudentCount} warning={unassignedStudentCount > 0} />
-        </section>
       )}
       {tab === 'users' && (
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -493,15 +483,6 @@ export default function AdminControlPage() {
           <MeetingSummary />
         </div>
       )}
-    </div>
-  )
-}
-
-function StatisticCard({ label, value, warning = false }: { label: string; value: number; warning?: boolean }) {
-  return (
-    <div className="rounded-lg bg-white p-5 shadow-sm">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className={`mt-2 text-3xl font-semibold ${warning ? 'text-red-700' : 'text-gray-900'}`}>{value}</p>
     </div>
   )
 }
@@ -744,10 +725,11 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
   const [passwordMode, setPasswordMode] = useState<'manual' | 'column'>('manual')
   const [defaultPassword, setDefaultPassword] = useState('')
   const [passwordColumn, setPasswordColumn] = useState('')
-  const [importRole, setImportRole] = useState<Role>('student')
+  const [importRole, setImportRole] = useState<'student' | 'lecturer'>('student')
   const [importing, setImporting] = useState(false)
   const cancelImportRequested = useRef(false)
-  const [progress, setProgress] = useState({ current: 0, imported: 0, failed: 0 })
+  const [progress, setProgress] = useState({ current: 0, total: 0, created: 0, updated: 0, failed: 0, etaSeconds: 0 })
+  const [validationSummary, setValidationSummary] = useState<{ valid: number; willCreate: number; willUpdate: number; invalid: number } | null>(null)
   const [failedRows, setFailedRows] = useState<ImportFailure[]>([])
   const [showFailureDetails, setShowFailureDetails] = useState(false)
   const [individualRole, setIndividualRole] = useState<Role>('lecturer')
@@ -848,14 +830,14 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
     const file = event.target.files?.[0]
     if (!file) return
     try {
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true })
       const sheetName = workbook.SheetNames[0]
       const sheet = workbook.Sheets[sheetName]
       if (!sheet) throw new Error('The workbook does not contain a readable worksheet.')
       const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
         header: 1,
         defval: '',
-        raw: false,
+        raw: true,
         blankrows: false,
       })
       const normalizeHeader = (value: string) => value
@@ -902,7 +884,11 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
       })
       if (!nextHeaders.length) throw new Error('The selected worksheet is empty or has no header row.')
       const records = matrix.slice(headerRowIndex + 1).map((row) => Object.fromEntries(
-        nextHeaders.map((header, index) => [header, String(row[index] ?? '').trim()]),
+        nextHeaders.map((header, index) => {
+          const value = row[index]
+          if (value instanceof Date) return [header, value.toISOString()]
+          return [header, String(value ?? '').trim()]
+        }),
       ))
       setHeaders(nextHeaders)
       setRows(records)
@@ -951,7 +937,6 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
 
   async function importUsers() {
     const nameColumn = mapping.name
-    const matricColumn = mapping.matric_number
     const emailColumn = mapping.email
     const missingMappedColumns = Object.entries(mapping)
       .filter(([, column]) => column && !headers.includes(column))
@@ -962,7 +947,7 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
     }
     if (!nameColumn || (importRole !== 'student' && !emailColumn)) {
       onError(importRole === 'student'
-        ? 'Map Nama before importing students. Nomatrik is optional.'
+        ? 'Map Nama and NoMatrik before importing students.'
         : 'Map Nama and Email before importing mentors.')
       return
     }
@@ -980,56 +965,38 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
     }
     setImporting(true)
     cancelImportRequested.current = false
-    setProgress({ current: 0, imported: 0, failed: 0 })
+    setProgress({ current: 0, total: rows.length, created: 0, updated: 0, failed: 0, etaSeconds: 0 })
     setFailedRows([])
     setShowFailureDetails(false)
     try {
-      let imported = 0
-      const failures: ImportFailure[] = []
-      const warnings: string[] = []
-      for (const [index, row] of rows.entries()) {
-        if (cancelImportRequested.current) break
-        const rowNumber = index + 2
+      const [allUsers, allMentors] = await Promise.all([adminService.listAllUsers(), adminService.getAvailableMentors()])
+      const validation = validateImportRows(rows, importRole, mapping, defaultPassword, passwordMode, passwordColumn, allUsers, allMentors)
+      setValidationSummary(validation.summary)
+      const invalidFailures: ImportFailure[] = validation.rows
+        .filter((row) => row.errors.length)
+        .map((row) => ({ rowNumber: row.rowNumber, name: row.name || 'unnamed', identifier: row.identifier, reason: row.errors.join(' ') }))
+      const validRows = validation.rows.filter((row) => row.errors.length === 0)
+      if (!window.confirm(`Dry run: ${validation.summary.valid} valid, ${validation.summary.willCreate} will create, ${validation.summary.willUpdate} will update, ${validation.summary.invalid} invalid. Continue?`)) {
+        setFailedRows(invalidFailures)
+        return
+      }
+      const failures: ImportFailure[] = [...invalidFailures]
+      let created = 0
+      let updated = 0
+      const startedAt = Date.now()
+      const mentorRows = importRole === 'lecturer' ? validRows : []
+      const studentRows = importRole === 'student' ? validRows : []
+      const orderedRows = [...mentorRows, ...studentRows]
+      const processRow = async (prepared: ImportValidationRow) => {
+        const row = rows[prepared.sourceIndex]
         try {
-          const name = row[nameColumn]?.trim()
-          const matricNumber = matricColumn ? row[matricColumn]?.trim() : ''
-          const rowHasData = Object.values(row).some((value) => value.trim())
-          if (!rowHasData) continue
-          if (!name) throw new Error('Nama is empty.')
-          if (matricNumber && !matricNumber.replace(/[^a-z0-9]/gi, '')) {
-            throw new Error('NoMatrik contains no usable letters or numbers.')
-          }
-          const email = importRole === 'student'
-            ? matricNumber ? studentAuthEmail(matricNumber) : `pending-${index + 2}-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}@student.local`
-            : row[emailColumn!]?.trim()
-          const password = passwordMode === 'column'
-            ? row[passwordColumn]?.trim() || defaultPassword.trim()
-            : defaultPassword.trim()
-          if (!email || !password) {
-            throw new Error(importRole === 'student'
-              ? 'Nama and the selected password value are required.'
-              : 'Nama, Email, and the selected password value are required.')
-          }
-          if (password.length < 8) {
-            throw new Error('Password must contain at least 8 characters.')
-          }
-          const mentorValue = importRole === 'student' && mapping.mentor ? row[mapping.mentor]?.trim() : ''
-          let mentorId: string | null = null
-          if (mentorValue) {
-            const mentor = await adminService.findUserByIdentifier(mentorValue)
-            if (mentor?.role === 'lecturer') {
-              mentorId = mentor.id
-            } else {
-              warnings.push(`Row ${rowNumber}: mentor "${mentorValue}" was not found; student imported without a mentor.`)
-            }
-          }
           const userInput = {
-            name,
+            name: prepared.name,
             role: importRole,
-            email,
-            password,
-            matric_number: matricNumber || undefined,
-            mentor_id: importRole === 'student' ? mentorId : undefined,
+            email: importRole === 'student' ? undefined : prepared.email,
+            password: prepared.password,
+            matric_number: prepared.matricNumber || undefined,
+            mentor_id: importRole === 'student' ? prepared.mentorId : undefined,
             ic_number: mapping.ic_number ? row[mapping.ic_number] || undefined : undefined,
             gender: mapping.gender ? row[mapping.gender] || undefined : undefined,
             religion: mapping.religion ? row[mapping.religion] || undefined : undefined,
@@ -1051,49 +1018,35 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
             grade: mapping.grade ? row[mapping.grade] || undefined : undefined,
             ums_per: mapping.ums_per ? row[mapping.ums_per] || undefined : undefined,
           } satisfies adminService.UserInput
-          const existingUser = importRole === 'student' && matricNumber
-            ? await adminService.findUserByIdentifier(matricNumber)
-            : importRole === 'lecturer'
-              ? await adminService.findUserByIdentifier(email)
-              : null
-          if (existingUser && existingUser.role !== importRole) {
-            throw new Error(`An existing ${existingUser.role} account already uses this identifier.`)
-          }
-          if (existingUser) {
-            await adminService.updateManagedUser(existingUser.id, userInput)
+          const findExisting = () => adminService.findUserByIdentifier(prepared.identifier)
+          if (prepared.existingUser) {
+            await adminService.updateManagedUserWithRetry(prepared.existingUser.id, userInput, findExisting)
           } else {
-            await adminService.createManagedUser(userInput)
+            await adminService.createManagedUserWithRetry(userInput, findExisting)
           }
-          imported += 1
+          if (prepared.existingUser) updated += 1
+          else created += 1
         } catch (err) {
-          const failure = {
-            rowNumber,
-            name: row[nameColumn]?.trim() || 'unnamed',
-            identifier: matricColumn ? row[matricColumn]?.trim() || '' : '',
-            reason: err instanceof Error ? err.message : 'unknown error',
-          }
-          failures.push(failure)
-          setFailedRows([...failures])
+          failures.push({ rowNumber: prepared.rowNumber, name: prepared.name || 'unnamed', identifier: prepared.identifier, reason: err instanceof Error ? err.message : 'unknown error' })
         } finally {
-          setProgress(() => ({
-            current: index + 1,
-            imported,
-            failed: failures.length,
-          }))
+          const current = created + updated + failures.length
+          const elapsed = Math.max(1, Date.now() - startedAt)
+          const rate = Math.max(0.001, (current - invalidFailures.length) / elapsed)
+          setProgress({ current: Math.min(rows.length, current), total: rows.length, created, updated, failed: failures.length, etaSeconds: Math.ceil(Math.max(0, orderedRows.length - (current - invalidFailures.length)) / (rate * 1000)) })
+          setFailedRows([...failures])
         }
       }
+      await runWithConcurrency(orderedRows, IMPORT_WORKER_COUNT, processRow, () => cancelImportRequested.current)
       const wasCancelled = cancelImportRequested.current
       onComplete()
       if (wasCancelled) {
-        onError(`${imported} of ${rows.length} rows imported before the import was cancelled.`)
+        onError(`${created + updated} of ${rows.length} rows imported before the import was cancelled.`)
         return
       }
       if (failures.length) {
-        onError(`${imported} of ${rows.length} imported. ${failures.length} row${failures.length === 1 ? '' : 's'} failed. Use View details beside the failed count to inspect them.`)
-      } else if (warnings.length) {
-        onMessage(`${imported} users imported. ${warnings.length} mentor assignment${warnings.length === 1 ? '' : 's'} skipped because the mentor account was not found.`)
+        onError(`${created + updated} of ${rows.length} imported. ${failures.length} row${failures.length === 1 ? '' : 's'} failed. Download the failed rows and re-import them after correction.`)
       } else {
-        onMessage(`${imported} users imported successfully.`)
+        onMessage(`${created} created and ${updated} updated successfully.`)
       }
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Import failed before rows could be processed.')
@@ -1103,12 +1056,12 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
   }
 
   const missingStudentFields = (row: Record<string, string>): ImportField[] => importRole === 'student'
-    ? (['matric_number', 'ic_number', 'phone'] as ImportField[]).filter((field) => !mapping[field] || !row[mapping[field]!]?.trim())
+    ? (['ic_number', 'phone'] as ImportField[]).filter((field) => !mapping[field] || !row[mapping[field]!]?.trim())
     : []
 
   return <section className="max-w-4xl rounded-lg bg-white p-5 shadow-sm">
     <h2 className="font-semibold">Import students or mentors from Excel</h2>
-    <p className="mb-4 text-sm text-gray-500">Upload a spreadsheet, choose the account type, confirm the detected columns, and edit any mapping that is incorrect. Student Nomatrik, KP, and phone are optional; missing values are marked as warnings and can be completed later from the profile. Mentor imports use Nama, Jawatan, Gred, UMS Per, and Email.</p>
+    <p className="mb-4 text-sm text-gray-500">Upload a spreadsheet, choose the account type, confirm the detected columns, and edit any mapping that is incorrect. Student Nomatrik and mentor Email are required for safe re-imports. KP and phone are optional. Mentor imports use Nama, Jawatan, Gred, UMS PER, and Email.</p>
     <div className="mb-4 flex gap-2 border-b border-gray-200 pb-3">
       <button type="button" onClick={() => setImportMode('excel')} className={`rounded px-3 py-2 text-sm font-medium ${importMode === 'excel' ? 'bg-ums-blue text-white' : 'bg-gray-100 text-gray-700'}`}>
         Import Excel
@@ -1171,7 +1124,7 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
     {importMode === 'excel' && <input type="file" accept=".xlsx,.xls,.csv" onChange={readFile} className="mb-4 block text-sm" />}
     {importMode === 'excel' && headers.length > 0 && <div className="space-y-3">
       <label className="block text-sm font-medium text-gray-700">Import account type
-        <select className="mt-1 w-full rounded border px-3 py-2" value={importRole} onChange={(event) => setImportRole(event.target.value as Role)}>
+        <select className="mt-1 w-full rounded border px-3 py-2" value={importRole} onChange={(event) => setImportRole(event.target.value as 'student' | 'lecturer')}>
           <option value="student">Students</option>
           <option value="lecturer">Mentors / lecturers</option>
         </select>
@@ -1217,12 +1170,17 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
           </tbody>
         </table>
       </div>
+      {validationSummary && (
+        <div className="rounded border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+          Dry-run summary: <strong>{validationSummary.valid} valid</strong> · {validationSummary.willCreate} will create · {validationSummary.willUpdate} will update · {validationSummary.invalid} invalid (skipped).
+        </div>
+      )}
       {importing && (
         <div className="rounded border border-blue-100 bg-blue-50 p-3" aria-live="polite">
           <div className="mb-2 flex items-center justify-between text-xs text-blue-800">
-            <span>Importing row {progress.current} of {rows.length}</span>
+            <span>Processed {progress.current} of {progress.total}{progress.etaSeconds > 0 ? ` · about ${progress.etaSeconds}s remaining` : ''}</span>
             <span className="flex items-center gap-2">
-              <span>{progress.imported} imported · {progress.failed} failed</span>
+              <span>{progress.created} created · {progress.updated} updated · {progress.failed} failed</span>
               {progress.failed > 0 && (
                 <button type="button" onClick={() => setShowFailureDetails((visible) => !visible)} className="font-medium text-red-700 underline">
                   {showFailureDetails ? 'Hide details' : 'View details'}
@@ -1243,14 +1201,19 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
         <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-900">
           <div className="flex items-center justify-between gap-3">
             <span>{failedRows.length} import row{failedRows.length === 1 ? '' : 's'} failed.</span>
-            <button type="button" onClick={() => setShowFailureDetails((visible) => !visible)} className="font-medium text-red-700 underline">
-              {showFailureDetails ? 'Hide details' : 'View details'}
-            </button>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setShowFailureDetails((visible) => !visible)} className="font-medium text-red-700 underline">
+                {showFailureDetails ? 'Hide details' : 'View details'}
+              </button>
+              <button type="button" onClick={() => downloadImportFailures(failedRows)} className="font-medium text-red-700 underline">
+                Download CSV
+              </button>
+            </div>
           </div>
           {showFailureDetails && <ImportFailureDetails failures={failedRows} />}
         </div>
       )}
-      <button disabled={importing || rows.length === 0} onClick={importUsers} className="rounded bg-ums-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{importing ? `Importing ${rows.length} accounts…` : `Import ${rows.length} ${importRole === 'student' ? 'students' : 'mentors'}`}</button>
+      <button disabled={importing || rows.length === 0} onClick={importUsers} className="rounded bg-ums-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{importing ? `Importing ${rows.length} accounts…` : `Validate and import ${rows.length} ${importRole === 'student' ? 'students' : 'mentors'}`}</button>
     </div>}
   </section>
 }
@@ -1260,7 +1223,7 @@ function ImportFailureDetails({ failures }: { failures: Array<{ rowNumber: numbe
     <div className="mt-3 max-h-80 overflow-y-auto rounded border border-red-200 bg-white">
       <table className="w-full text-left text-xs">
         <thead className="sticky top-0 bg-red-100 text-red-900">
-          <tr><th className="p-2">Row</th><th className="p-2">Student</th><th className="p-2">Nomatrik</th><th className="p-2">Why it failed</th></tr>
+          <tr><th className="p-2">Row</th><th className="p-2">Name</th><th className="p-2">Nomatrik / Email</th><th className="p-2">Why it failed</th></tr>
         </thead>
         <tbody className="divide-y divide-red-100">
           {failures.map((failure) => (
@@ -1275,6 +1238,20 @@ function ImportFailureDetails({ failures }: { failures: Array<{ rowNumber: numbe
       </table>
     </div>
   )
+}
+
+function downloadImportFailures(failures: Array<{ rowNumber: number; name: string; identifier: string; reason: string }>) {
+  const escapeCsv = (value: string) => `"${value.replace(/"/g, '""')}"`
+  const csv = [
+    ['Original row', 'Nama', 'NoMatrik/Email', 'Error reason'],
+    ...failures.map((failure) => [String(failure.rowNumber), failure.name, failure.identifier, failure.reason]),
+  ].map((row) => row.map(escapeCsv).join(',')).join('\r\n')
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = 'failed-import-rows.csv'
+  anchor.click()
+  URL.revokeObjectURL(url)
 }
 
 function fieldLabel(field: ImportField) {
