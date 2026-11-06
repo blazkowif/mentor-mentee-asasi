@@ -40,7 +40,7 @@ export default function MessageBubble({
           setIsMenuOpen(true)
         }}
       >
-        {message.message && <p className="whitespace-pre-wrap">{message.message}</p>}
+        {message.message && <p className="whitespace-pre-wrap">{renderMessage(message.message, isOwn)}</p>}
         {message.attachment && (
           <a
             href={message.attachment}
@@ -70,4 +70,13 @@ export default function MessageBubble({
       </div>
     </div>
   )
+}
+
+function renderMessage(message: string, isOwn: boolean) {
+  const parts = message.split(/(https?:\/\/[^\s]+|\/meeting-report\/[^\s]+)/g)
+  return parts.map((part, index) => {
+    if (!part.match(/^(https?:\/\/|\/meeting-report\/)/)) return <span key={index}>{part}</span>
+    const cleanUrl = part.replace(/[.,!?]+$/, '')
+    return <a key={index} href={cleanUrl} target="_blank" rel="noreferrer" className={clsx('underline', isOwn ? 'text-indigo-100' : 'text-[#9e98ff]')}>{cleanUrl}</a>
+  })
 }

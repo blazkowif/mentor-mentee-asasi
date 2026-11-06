@@ -131,6 +131,15 @@ npm run dev
   Auth accounts. Apply migration `0034_reset_data_keep_admin.sql` only when a
   full non-admin reset is intended, and redeploy `admin-user` after any
   function change.
+- Supabase availability: authenticated pages run a lightweight health check
+  when opened, when the browser returns online, when the tab becomes visible,
+  and every 60 seconds. If the project is paused, waking, or unreachable, the
+  interface displays a warning and a **Retry connection** button. A Vercel
+  frontend cannot safely reactivate a paused Supabase project because that
+  requires Supabase Management API owner credentials. Do not put those
+  credentials in `VITE_*` variables or browser code; resume the project in
+  Supabase, or use a separately secured server-side operations service if
+  automated lifecycle control is required.
 
 
 ## For developer testing

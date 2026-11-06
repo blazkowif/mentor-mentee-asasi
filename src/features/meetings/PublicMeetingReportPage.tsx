@@ -16,7 +16,7 @@ export default function PublicMeetingReportPage() {
   const [attention, setAttention] = useState<Record<string, boolean>>({})
   const [remarks, setRemarks] = useState<Record<string, string>>({})
   const save = useMutation({
-    mutationFn: () => meetingService.savePublicMeetingReport({
+    mutationFn: (shouldSubmit: boolean) => meetingService.savePublicMeetingReport({
       reportToken: token,
       overallSummary: overallSummary.trim(),
       studentReports: rows.map((row) => ({
@@ -25,6 +25,7 @@ export default function PublicMeetingReportPage() {
         needs_attention: attention[row.assignment_id] ?? row.needs_attention,
         attention_remark: (remarks[row.assignment_id] ?? row.attention_remark ?? '').trim() || null,
       })),
+      submit: shouldSubmit,
     }),
   })
   const meeting = rows[0]
@@ -44,15 +45,15 @@ export default function PublicMeetingReportPage() {
         </header>
         <section className="rounded-lg bg-white p-5 shadow-sm">
           <h2 className="font-semibold text-gray-900">Overall meeting summary</h2>
-          <textarea rows={5} defaultValue={initialSummary} onChange={(event) => setOverallSummary(event.target.value)} placeholder="Summarise the overall meeting…" className="mt-3 w-full rounded border px-3 py-2 text-sm" />
+          <textarea rows={5} defaultValue={initialSummary} disabled={meeting.is_submitted} onChange={(event) => setOverallSummary(event.target.value)} placeholder="Summarise the overall meeting…" className="mt-3 w-full rounded border px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-500" />
         </section>
         <section className="space-y-3">
           <h2 className="font-semibold text-gray-900">Students</h2>
           {rows.map((row) => (
             <article key={row.assignment_id} className="rounded-lg bg-white p-5 shadow-sm">
               <h3 className="font-medium text-gray-900">{row.student_name}</h3>
-              <textarea rows={3} defaultValue={row.student_comment} onChange={(event) => setComments((current) => ({ ...current, [row.assignment_id]: event.target.value }))} placeholder="Comment about this student…" className="mt-3 w-full rounded border px-3 py-2 text-sm" />
-              <label className="mt-3 flex items-center gap-2 text-sm font-medium text-red-700"><input type="checkbox" checked={attention[row.assignment_id] ?? row.needs_attention} onChange={(event) => setAttention((current) => ({ ...current, [row.assignment_id]: event.target.checked }))} /> Needs special attention</label>
+              <textarea rows={3} defaultValue={row.student_comment} disabled={meeting.is_submitted} onChange={(event) => setComments((current) => ({ ...current, [row.assignment_id]: event.target.value }))} placeholder="Comment about this student…" className="mt-3 w-full rounded border px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-500" />
+              <label className="mt-3 flex items-center gap-2 text-sm font-medium text-red-700"><input type="checkbox" disabled={meeting.is_submitted} checked={attention[row.assignment_id] ?? row.needs_attention} onChange={(event) => setAttention((current) => ({ ...current, [row.assignment_id]: event.target.checked }))} /> Needs special attention</label>
               {(attention[row.assignment_id] ?? row.needs_attention) && <textarea rows={2} defaultValue={row.attention_remark ?? ''} onChange={(event) => setRemarks((current) => ({ ...current, [row.assignment_id]: event.target.value }))} placeholder="Explain what attention is needed…" className="mt-2 w-full rounded border border-red-200 px-3 py-2 text-sm" />}
             </article>
           ))}
@@ -60,7 +61,7 @@ export default function PublicMeetingReportPage() {
         <div className="flex items-center justify-between gap-3">
           {save.isSuccess && <p className="text-sm text-green-700">Meeting report saved.</p>}
           {save.isError && <p className="text-sm text-red-700">{save.error instanceof Error ? save.error.message : 'Unable to save report.'}</p>}
-          <button type="button" disabled={save.isPending || !(overallSummary.trim() || initialSummary.trim())} onClick={() => save.mutate()} className="ml-auto rounded bg-ums-blue px-5 py-2 text-sm font-medium text-white disabled:opacity-50">{save.isPending ? 'Saving…' : 'Save meeting report'}</button>
+          {!meeting.is_submitted && <div className="ml-auto flex gap-2"><button type="button" disabled={save.isPending || !(overallSummary.trim() || initialSummary.trim())} onClick={() => save.mutate(false)} className="rounded border border-ums-blue px-5 py-2 text-sm font-medium text-ums-blue disabled:opacity-50">Save draft</button><button type="button" disabled={save.isPending || !(overallSummary.trim() || initialSummary.trim())} onClick={() => save.mutate(true)} className="rounded bg-ums-blue px-5 py-2 text-sm font-medium text-white disabled:opacity-50">Submit to admin</button></div>}
         </div>
       </section>
     </main>

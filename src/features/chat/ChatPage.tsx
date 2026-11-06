@@ -41,7 +41,7 @@ export default function ChatPage() {
   const { data: mentees } = useMentees(isLecturer ? user?.id : undefined)
   const { data: mentor } = useMentor(!isLecturer ? user?.mentor_id : undefined)
   const { data: groups = [] } = useMyGroups(user?.id)
-  const { data: studentResults = [] } = useStudentSearch(studentSearch, role === 'student' || isAdmin)
+  const { data: studentResults = [] } = useStudentSearch(studentSearch, role === 'student' || isAdmin || isLecturer)
   const pinnedContactsQuery = usePinnedChatContacts(user?.id, !isAdmin)
   const { data: pinnedContacts = [] } = pinnedContactsQuery
   const { data: chatContacts = [] } = useChatContacts(user?.id)
@@ -111,7 +111,7 @@ export default function ChatPage() {
     if (isLecturer) {
       mentees?.forEach((m) => list.push({ key: `personal:${m.id}`, label: m.name, subtitle: m.matric_number ?? undefined }))
     }
-    if (role === 'student' || isAdmin) {
+    if (role === 'student' || isAdmin || isLecturer) {
       studentResults.forEach((student) =>
         list.push({ key: `personal:${student.id}`, label: student.name, subtitle: student.matric_number ?? 'Student' }),
       )
@@ -140,6 +140,11 @@ export default function ChatPage() {
     effectiveActiveKey?.startsWith('personal:') ? effectiveActiveKey.split(':')[1] : undefined
 
   const activeGroupId = effectiveActiveKey?.startsWith('group:') ? effectiveActiveKey.slice(6) : undefined
+  const groupMembersQuery = useQuery({
+    queryKey: ['chat', 'group-members', activeGroupId ?? ''],
+    queryFn: () => chatService.listGroupMembers(activeGroupId!),
+    enabled: !!activeGroupId,
+  })
   const groupMessages = useGroupMessages(activeGroupId)
   const personalMessages = usePersonalMessages(
     effectiveActiveKey?.startsWith('personal:') ? user?.id : undefined,
@@ -275,11 +280,11 @@ export default function ChatPage() {
               {clearingHistory ? 'Clearing history…' : 'Clear all chat history'}
             </button>
           )}
-          {(role === 'student' || isAdmin) && (
+          {(role === 'student' || isAdmin || isLecturer) && (
             <input
               value={studentSearch}
               onChange={(event) => setStudentSearch(event.target.value)}
-              placeholder="Find a student..."
+              placeholder="Find a person..."
               className="mt-3 w-full rounded-lg border border-[#4b5375] bg-[#171b2b] px-3 py-2 text-xs text-white outline-none placeholder:text-[#9ca5c5] focus:border-[#8994ed]"
             />
           )}
@@ -301,6 +306,18 @@ export default function ChatPage() {
               </button>
               <span className="ml-2 text-xs text-[#8f95b5]">{activeThread.subtitle}</span>
             </div>
+            {activeGroupId && (
+              <div className="border-b border-[#3a405c] bg-[#20243a] px-5 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#aeb6d2]">Group members</p>
+                <div className="flex flex-wrap gap-2">
+                  {groupMembersQuery.data?.map((member) => (
+                    <button key={member.id} type="button" onClick={() => setProfileUserId(member.id)} className="rounded-full bg-[#303650] px-3 py-1 text-xs text-white hover:bg-[#46507a]">
+                      {member.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex-1 space-y-2 overflow-y-auto bg-[#171b2b] p-5">
               {visibleMessages.map((m) => (
                 <MessageBubble
@@ -327,7 +344,7 @@ export default function ChatPage() {
             {isAdmin
               ? 'Select a staff member or student to start chatting.'
               : isLecturer
-              ? 'Select a mentee to start chatting.'
+              ? 'Select a contact or mentee to start chatting.'
               : role === 'student'
               ? 'Your mentor chat will appear here once assigned.'
               : 'Chat is available only for mentor-mentee conversations.'}

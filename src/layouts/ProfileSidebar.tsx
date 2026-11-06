@@ -18,7 +18,7 @@ export default function ProfileSidebar() {
   const unreadChatCount = notifications.filter(
     (notification) => !notification.is_read && notification.title === 'New chat message',
   ).length
-  const unreadTaskCount = notifications.filter((notification) => !notification.is_read && notification.title === 'New task assigned').length
+  const unreadTaskCount = notifications.filter((notification) => !notification.is_read && (notification.title === 'New task assigned' || notification.title === 'Meeting report required')).length
   const unreadAnnouncementCount = notifications.filter((notification) => !notification.is_read && notification.title === 'New announcement').length
   const unreadNotificationCount = notifications.filter((notification) => !notification.is_read).length
 

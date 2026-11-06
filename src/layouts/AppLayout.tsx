@@ -2,6 +2,7 @@ import { Outlet, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/features/auth/authStore'
 import { logout } from '@/services/authService'
 import ProfileSidebar from './ProfileSidebar'
+import SupabaseStatusBanner from '@/components/SupabaseStatusBanner'
 
 export default function AppLayout() {
   const { user, role } = useAuthStore()
@@ -30,6 +31,7 @@ export default function AppLayout() {
           </button>
         </div>
       </header>
+      <SupabaseStatusBanner />
       <div className="flex">
         <ProfileSidebar />
         <main className="flex-1 p-6">

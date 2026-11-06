@@ -4,6 +4,7 @@ import type { Database } from '@/types/database.types'
 export type MeetingTask = Database['public']['Tables']['meeting_tasks']['Row']
 export type MeetingAssignment = Database['public']['Tables']['meeting_assignments']['Row']
 export type MeetingReport = Database['public']['Tables']['meeting_reports']['Row']
+export type MeetingReportComment = Database['public']['Tables']['meeting_report_comments']['Row']
 export type PublicMeetingReport = Database['public']['Functions']['get_public_meeting_report']['Returns'][number]
 
 export async function listMeetingTasks(): Promise<MeetingTask[]> {
@@ -98,6 +99,35 @@ export async function assignMeetingToMentor(meetingTaskId: string, mentorId: str
   return data
 }
 
+export async function assignMeetingToAllMentors(meetingTaskId: string, reportUrl: string) {
+  const { data, error } = await supabase.rpc('assign_meeting_to_all_mentors', {
+    p_meeting_task_id: meetingTaskId,
+    p_report_url: reportUrl,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function listMeetingReportComments(assignmentIds: string[]): Promise<MeetingReportComment[]> {
+  if (assignmentIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('meeting_report_comments')
+    .select('*')
+    .in('meeting_assignment_id', assignmentIds)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function addMeetingReportComment(assignmentId: string, comment: string) {
+  const { data, error } = await supabase.rpc('add_meeting_report_comment', {
+    p_assignment_id: assignmentId,
+    p_comment: comment,
+  })
+  if (error) throw error
+  return data
+}
+
 export async function getPublicMeetingReport(reportToken: string): Promise<PublicMeetingReport[]> {
   const { data, error } = await supabase.rpc('get_public_meeting_report', {
     p_report_token: reportToken,
@@ -115,11 +145,13 @@ export async function savePublicMeetingReport(params: {
     needs_attention: boolean
     attention_remark: string | null
   }>
+  submit?: boolean
 }) {
   const { error } = await supabase.rpc('save_public_meeting_report', {
     p_report_token: params.reportToken,
     p_overall_summary: params.overallSummary,
     p_student_reports: params.studentReports,
+    p_submit: params.submit ?? false,
   })
   if (error) throw error
 }

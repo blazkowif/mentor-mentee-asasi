@@ -368,6 +368,7 @@ export interface Database {
           student_comment: string
           needs_attention: boolean
           attention_remark: string | null
+          is_submitted: boolean
           completed_at: string
         }
         Insert: Partial<Database['public']['Tables']['meeting_reports']['Row']> & {
@@ -377,6 +378,22 @@ export interface Database {
           overall_summary: string
         }
         Update: Partial<Database['public']['Tables']['meeting_reports']['Row']>
+        Relationships: []
+      }
+      meeting_report_comments: {
+        Row: {
+          id: string
+          meeting_assignment_id: string
+          mentor_id: string
+          comment: string
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['meeting_report_comments']['Row']> & {
+          meeting_assignment_id: string
+          mentor_id: string
+          comment: string
+        }
+        Update: never
         Relationships: []
       }
     }
@@ -421,6 +438,21 @@ export interface Database {
           group_name: string
           created_at: string
           is_current: boolean
+        }>
+      }
+      list_mentor_group_members: {
+        Args: { p_group_id: string }
+        Returns: Array<{
+          id: string
+          name: string
+          role: UserRole
+          matric_number: string | null
+          programme: string | null
+          email: string | null
+          phone: string | null
+          address: string | null
+          motto: string | null
+          profile_image: string | null
         }>
       }
       list_pinned_chat_contacts: {
@@ -469,6 +501,14 @@ export interface Database {
         Args: { p_meeting_task_id: string; p_mentor_id: string }
         Returns: number
       }
+      assign_meeting_to_all_mentors: {
+        Args: { p_meeting_task_id: string; p_report_url: string }
+        Returns: number
+      }
+      add_meeting_report_comment: {
+        Args: { p_assignment_id: string; p_comment: string }
+        Returns: Database['public']['Tables']['meeting_report_comments']['Row']
+      }
       get_public_meeting_report: {
         Args: { p_report_token: string }
         Returns: Array<{
@@ -487,6 +527,7 @@ export interface Database {
           student_comment: string
           needs_attention: boolean
           attention_remark: string | null
+          is_submitted: boolean
         }>
       }
       save_public_meeting_report: {
@@ -499,6 +540,7 @@ export interface Database {
             needs_attention: boolean
             attention_remark: string | null
           }>
+          p_submit?: boolean
         }
         Returns: undefined
       }
