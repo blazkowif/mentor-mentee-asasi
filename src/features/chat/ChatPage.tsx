@@ -45,6 +45,12 @@ export default function ChatPage() {
   const pinnedContactsQuery = usePinnedChatContacts(user?.id, !isAdmin)
   const { data: pinnedContacts = [] } = pinnedContactsQuery
   const { data: chatContacts = [] } = useChatContacts(user?.id)
+  const currentGroupId = groups.find((chatGroup) => chatGroup.is_current)?.id
+  const currentGroupMembersQuery = useQuery({
+    queryKey: ['chat', 'current-group-members', currentGroupId ?? ''],
+    queryFn: () => chatService.listGroupMembers(currentGroupId!),
+    enabled: !!currentGroupId && role === 'student',
+  })
   const markChatRead = useMarkChatRead()
   const sendMessage = useSendMessage()
   const deleteMessage = useDeleteMessage()
@@ -116,8 +122,14 @@ export default function ChatPage() {
         list.push({ key: `personal:${student.id}`, label: student.name, subtitle: student.matric_number ?? 'Student' }),
       )
     }
+    if (role === 'student') {
+      currentGroupMembersQuery.data?.forEach((member) => {
+        if (member.id === user?.id || list.some((thread) => thread.key === `personal:${member.id}`)) return
+        list.push({ key: `personal:${member.id}`, label: member.name, subtitle: member.matric_number ?? 'Group mentee' })
+      })
+    }
     return list
-  }, [chatContacts, groups, isAdmin, isLecturer, mentees, mentor, pinnedContacts, role, studentResults])
+  }, [chatContacts, currentGroupMembersQuery.data, groups, isAdmin, isLecturer, mentees, mentor, pinnedContacts, role, studentResults, user?.id])
 
   function selectThread(key: string) {
     setActiveKey(key)
@@ -311,7 +323,7 @@ export default function ChatPage() {
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#aeb6d2]">Group members</p>
                 <div className="flex flex-wrap gap-2">
                   {groupMembersQuery.data?.map((member) => (
-                    <button key={member.id} type="button" onClick={() => setProfileUserId(member.id)} className="rounded-full bg-[#303650] px-3 py-1 text-xs text-white hover:bg-[#46507a]">
+                    <button key={member.id} type="button" onClick={() => selectThread(`personal:${member.id}`)} className="rounded-full bg-[#303650] px-3 py-1 text-xs text-white hover:bg-[#46507a]">
                       {member.name}
                     </button>
                   ))}

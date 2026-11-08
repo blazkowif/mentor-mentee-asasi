@@ -729,8 +729,9 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
   const [importing, setImporting] = useState(false)
   const cancelImportRequested = useRef(false)
   const [progress, setProgress] = useState({ current: 0, total: 0, created: 0, updated: 0, failed: 0, etaSeconds: 0 })
-  const [validationSummary, setValidationSummary] = useState<{ valid: number; willCreate: number; willUpdate: number; invalid: number } | null>(null)
+  const [validationSummary, setValidationSummary] = useState<{ valid: number; willCreate: number; willUpdate: number; invalid: number; warnings: number } | null>(null)
   const [failedRows, setFailedRows] = useState<ImportFailure[]>([])
+  const [warningRows, setWarningRows] = useState<ImportFailure[]>([])
   const [showFailureDetails, setShowFailureDetails] = useState(false)
   const [individualRole, setIndividualRole] = useState<Role>('lecturer')
   const [individualForm, setIndividualForm] = useState({
@@ -893,6 +894,7 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
       setHeaders(nextHeaders)
       setRows(records)
       setFailedRows([])
+      setWarningRows([])
       setShowFailureDetails(false)
       const defaultMapping: Partial<Record<ImportField, string>> = {}
       const aliases: Partial<Record<ImportField, string[]>> = {
@@ -967,6 +969,7 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
     cancelImportRequested.current = false
     setProgress({ current: 0, total: rows.length, created: 0, updated: 0, failed: 0, etaSeconds: 0 })
     setFailedRows([])
+    setWarningRows([])
     setShowFailureDetails(false)
     try {
       const [allUsers, allMentors] = await Promise.all([adminService.listAllUsers(), adminService.getAvailableMentors()])
@@ -975,11 +978,15 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
       const invalidFailures: ImportFailure[] = validation.rows
         .filter((row) => row.errors.length)
         .map((row) => ({ rowNumber: row.rowNumber, name: row.name || 'unnamed', identifier: row.identifier, reason: row.errors.join(' ') }))
+      const warnings: ImportFailure[] = validation.rows
+        .filter((row) => !row.errors.length && row.warnings.length)
+        .map((row) => ({ rowNumber: row.rowNumber, name: row.name || 'unnamed', identifier: row.identifier, reason: row.warnings.join(' ') }))
       const validRows = validation.rows.filter((row) => row.errors.length === 0)
-      if (!window.confirm(`Dry run: ${validation.summary.valid} valid, ${validation.summary.willCreate} will create, ${validation.summary.willUpdate} will update, ${validation.summary.invalid} invalid. Continue?`)) {
-        setFailedRows(invalidFailures)
+      setFailedRows(invalidFailures)
+      if (!window.confirm(`Dry run: ${validation.summary.valid} valid, ${validation.summary.willCreate} will create, ${validation.summary.willUpdate} will update, ${validation.summary.invalid} invalid, ${validation.summary.warnings} missing optional field${validation.summary.warnings === 1 ? '' : 's'}. Continue?`)) {
         return
       }
+      setWarningRows(warnings)
       const failures: ImportFailure[] = [...invalidFailures]
       let created = 0
       let updated = 0
@@ -1046,7 +1053,8 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
       if (failures.length) {
         onError(`${created + updated} of ${rows.length} imported. ${failures.length} row${failures.length === 1 ? '' : 's'} failed. Download the failed rows and re-import them after correction.`)
       } else {
-        onMessage(`${created} created and ${updated} updated successfully.`)
+        const warningMessage = warnings.length ? ` ${warnings.length} optional field warning${warnings.length === 1 ? '' : 's'} found; review the warning list below.` : ''
+        onMessage(`${created} created and ${updated} updated successfully.${warningMessage}`)
       }
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Import failed before rows could be processed.')
@@ -1172,7 +1180,7 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
       </div>
       {validationSummary && (
         <div className="rounded border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
-          Dry-run summary: <strong>{validationSummary.valid} valid</strong> · {validationSummary.willCreate} will create · {validationSummary.willUpdate} will update · {validationSummary.invalid} invalid (skipped).
+          Dry-run summary: <strong>{validationSummary.valid} valid</strong> · {validationSummary.willCreate} will create · {validationSummary.willUpdate} will update · {validationSummary.invalid} invalid (skipped) · {validationSummary.warnings} missing optional field{validationSummary.warnings === 1 ? '' : 's'} (will import).
         </div>
       )}
       {importing && (
@@ -1213,17 +1221,28 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
           {showFailureDetails && <ImportFailureDetails failures={failedRows} />}
         </div>
       )}
+      {!importing && warningRows.length > 0 && (
+        <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="flex items-center justify-between gap-3">
+            <span>{warningRows.length} optional student field warning{warningRows.length === 1 ? '' : 's'} found. These rows were imported.</span>
+            <button type="button" onClick={() => setShowFailureDetails((visible) => !visible)} className="font-medium text-amber-700 underline">
+              {showFailureDetails ? 'Hide details' : 'View details'}
+            </button>
+          </div>
+          {showFailureDetails && <ImportFailureDetails failures={warningRows} heading="Missing optional data" />}
+        </div>
+      )}
       <button disabled={importing || rows.length === 0} onClick={importUsers} className="rounded bg-ums-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{importing ? `Importing ${rows.length} accounts…` : `Validate and import ${rows.length} ${importRole === 'student' ? 'students' : 'mentors'}`}</button>
     </div>}
   </section>
 }
 
-function ImportFailureDetails({ failures }: { failures: Array<{ rowNumber: number; name: string; identifier: string; reason: string }> }) {
+function ImportFailureDetails({ failures, heading = 'Why it failed' }: { failures: Array<{ rowNumber: number; name: string; identifier: string; reason: string }>; heading?: string }) {
   return (
     <div className="mt-3 max-h-80 overflow-y-auto rounded border border-red-200 bg-white">
       <table className="w-full text-left text-xs">
         <thead className="sticky top-0 bg-red-100 text-red-900">
-          <tr><th className="p-2">Row</th><th className="p-2">Name</th><th className="p-2">Nomatrik / Email</th><th className="p-2">Why it failed</th></tr>
+          <tr><th className="p-2">Row</th><th className="p-2">Name</th><th className="p-2">Nomatrik / Email</th><th className="p-2">{heading}</th></tr>
         </thead>
         <tbody className="divide-y divide-red-100">
           {failures.map((failure) => (

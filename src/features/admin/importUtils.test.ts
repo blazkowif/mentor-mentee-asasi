@@ -24,8 +24,45 @@ describe('import validation', () => {
 
     expect(result.summary.invalid).toBe(2)
     expect(result.rows[0].errors).toContain('Duplicate matric number in this sheet.')
-    expect(result.rows[0].errors).toContain('Mentor "Missing" was not found.')
+    expect(result.rows[0].warnings).toContain('Mentor "Missing" was not found; imported without mentor assignment.')
     expect(result.rows[1].errors).toContain('Password is missing or shorter than 8 characters.')
+  })
+
+  it('keeps missing optional student details as warnings instead of blocking the row', () => {
+    const result = validateImportRows(
+      [{ Name: 'A', Matric: 'S-1', Password: 'password1' }],
+      'student',
+      { name: 'Name', matric_number: 'Matric' },
+      '',
+      'column',
+      'Password',
+      [],
+      [],
+    )
+
+    expect(result.summary.valid).toBe(1)
+    expect(result.summary.invalid).toBe(0)
+    expect(result.summary.warnings).toBe(2)
+    expect(result.rows[0].errors).toEqual([])
+    expect(result.rows[0].warnings).toEqual(['IC number is missing.', 'Phone number is missing.'])
+  })
+
+  it('imports students when the mentor is unavailable and reports a warning', () => {
+    const result = validateImportRows(
+      [{ Name: 'A', Matric: 'S-2', Mentor: 'Unavailable', Password: 'password1' }],
+      'student',
+      { name: 'Name', matric_number: 'Matric', mentor: 'Mentor' },
+      '',
+      'column',
+      'Password',
+      [],
+      [],
+    )
+
+    expect(result.summary.valid).toBe(1)
+    expect(result.summary.invalid).toBe(0)
+    expect(result.rows[0].mentorId).toBeNull()
+    expect(result.rows[0].warnings).toContain('Mentor "Unavailable" was not found; imported without mentor assignment.')
   })
 })
 

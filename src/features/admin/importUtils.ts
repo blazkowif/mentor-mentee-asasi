@@ -23,12 +23,14 @@ export type ImportValidationRow = {
   existingUser: ImportLookupUser | null
   mentorId: string | null
   errors: string[]
+  warnings: string[]
 }
 export type ImportValidationSummary = {
   valid: number
   willCreate: number
   willUpdate: number
   invalid: number
+  warnings: number
 }
 
 export function normalizeLookup(value: string) {
@@ -80,6 +82,7 @@ export function validateImportRows(
     if (normalizedMatric) matricCounts.set(normalizedMatric, (matricCounts.get(normalizedMatric) ?? 0) + 1)
     if (normalizedEmail) emailCounts.set(normalizedEmail, (emailCounts.get(normalizedEmail) ?? 0) + 1)
     const errors: string[] = []
+    const warnings: string[] = []
     if (!name) errors.push('Nama is missing.')
     if (role === 'student') {
       if (!matricNumber) errors.push('NoMatrik is missing.')
@@ -97,7 +100,11 @@ export function validateImportRows(
         ?? mentorMaps.byMatric.get(normalizeMatricNumber(mentorValue))
         ?? null
       : null
-    if (role === 'student' && mentorValue && !mentor) errors.push(`Mentor "${mentorValue}" was not found.`)
+    if (role === 'student' && mentorValue && !mentor) warnings.push(`Mentor "${mentorValue}" was not found; imported without mentor assignment.`)
+    if (role === 'student') {
+      if (!mapping.ic_number || !row[mapping.ic_number]?.trim()) warnings.push('IC number is missing.')
+      if (!mapping.phone || !row[mapping.phone]?.trim()) warnings.push('Phone number is missing.')
+    }
     return {
       sourceIndex,
       rowNumber: sourceIndex + 2,
@@ -110,6 +117,7 @@ export function validateImportRows(
       existingUser,
       mentorId: mentor?.id ?? null,
       errors,
+      warnings,
     }
   })
   for (const row of prepared) {
@@ -125,8 +133,9 @@ export function validateImportRows(
     else if (row.existingUser) result.willUpdate += 1
     else result.willCreate += 1
     if (!row.errors.length) result.valid += 1
+    if (!row.errors.length) result.warnings += row.warnings.length
     return result
-  }, { valid: 0, willCreate: 0, willUpdate: 0, invalid: 0 })
+  }, { valid: 0, willCreate: 0, willUpdate: 0, invalid: 0, warnings: 0 })
   return { rows: prepared, summary }
 }
 

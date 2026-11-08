@@ -95,6 +95,8 @@ Administrator capabilities include:
 - mapping Malay student-import fields into application fields;
 - choosing the source of imported passwords, with KP selected by the import
   workflow;
+- importing student rows that are missing optional IC or phone values while
+  reporting those missing values as post-import warnings;
 - assigning or unassigning mentors individually or in bulk;
 - auto-assigning currently unassigned students to available lecturers;
 - creating and deleting mentor assignments;
