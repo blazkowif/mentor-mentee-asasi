@@ -64,6 +64,22 @@ describe('import validation', () => {
     expect(result.rows[0].mentorId).toBeNull()
     expect(result.rows[0].warnings).toContain('Mentor "Unavailable" was not found; imported without mentor assignment.')
   })
+
+  it('validates administrator imports using staff email fields', () => {
+    const result = validateImportRows(
+      [{ Name: 'Admin', Email: 'admin@example.com', Password: 'password1' }],
+      'admin',
+      { name: 'Name', email: 'Email' },
+      '',
+      'column',
+      'Password',
+      [],
+      [],
+    )
+
+    expect(result.summary.valid).toBe(1)
+    expect(result.rows[0].identifier).toBe('admin@example.com')
+  })
 })
 
 describe('import concurrency', () => {

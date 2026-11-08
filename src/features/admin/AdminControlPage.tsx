@@ -725,7 +725,7 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
   const [passwordMode, setPasswordMode] = useState<'manual' | 'column'>('manual')
   const [defaultPassword, setDefaultPassword] = useState('')
   const [passwordColumn, setPasswordColumn] = useState('')
-  const [importRole, setImportRole] = useState<'student' | 'lecturer'>('student')
+  const [importRole, setImportRole] = useState<'student' | 'lecturer' | 'admin'>('student')
   const [importing, setImporting] = useState(false)
   const cancelImportRequested = useRef(false)
   const [progress, setProgress] = useState({ current: 0, total: 0, created: 0, updated: 0, failed: 0, etaSeconds: 0 })
@@ -791,8 +791,8 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
       onError('NoMatrik is required for an individual student.')
       return
     }
-    if (individualRole === 'lecturer' && (!email || requiredMentorFields.some((value) => !value.trim()))) {
-      onError('Mentor accounts require Nama, Jawatan, Gred, UMS PER, and Email.')
+    if (individualRole !== 'student' && (!email || requiredMentorFields.some((value) => !value.trim()))) {
+      onError(`${individualRole === 'admin' ? 'Administrator' : 'Mentor'} accounts require Nama, Jawatan, Gred, UMS PER, and Email.`)
       return
     }
     setSavingIndividual(true)
@@ -800,13 +800,13 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
       await adminService.createManagedUser({
         name,
         role: individualRole,
-        email: individualRole === 'lecturer' ? email : undefined,
+        email: individualRole !== 'student' ? email : undefined,
         password,
         matric_number: individualRole === 'student' ? matricNumber : undefined,
         programme: individualForm.programme.trim() || undefined,
-        job_title: individualRole === 'lecturer' ? individualForm.job_title.trim() : undefined,
-        grade: individualRole === 'lecturer' ? individualForm.grade.trim() : undefined,
-        ums_per: individualRole === 'lecturer' ? individualForm.ums_per.trim() : undefined,
+        job_title: individualRole !== 'student' ? individualForm.job_title.trim() : undefined,
+        grade: individualRole !== 'student' ? individualForm.grade.trim() : undefined,
+        ums_per: individualRole !== 'student' ? individualForm.ums_per.trim() : undefined,
       })
       setIndividualForm({
         name: '',
@@ -819,7 +819,7 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
         programme: '',
       })
       onComplete()
-      onMessage(`${individualRole === 'lecturer' ? 'Mentor' : 'Student'} account created successfully.`)
+      onMessage(`${individualRole === 'student' ? 'Student' : individualRole === 'admin' ? 'Administrator' : 'Mentor'} account created successfully.`)
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Unable to create the account.')
     } finally {
@@ -950,11 +950,11 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
     if (!nameColumn || (importRole !== 'student' && !emailColumn)) {
       onError(importRole === 'student'
         ? 'Map Nama and NoMatrik before importing students.'
-        : 'Map Nama and Email before importing mentors.')
+        : `Map Nama and Email before importing ${importRole === 'admin' ? 'administrators' : 'mentors'}.`)
       return
     }
-    if (importRole === 'lecturer' && ['name', 'job_title', 'grade', 'ums_per', 'email'].some((field) => !mapping[field as ImportField])) {
-      onError('Map all required mentor columns: Nama, Jawatan, Gred, UMS Per, and Email. Programme is optional.')
+    if (importRole !== 'student' && ['name', 'job_title', 'grade', 'ums_per', 'email'].some((field) => !mapping[field as ImportField])) {
+      onError(`Map all required ${importRole === 'admin' ? 'administrator' : 'mentor'} columns: Nama, Jawatan, Gred, UMS Per, and Email. Programme is optional.`)
       return
     }
     if (passwordMode === 'manual' && defaultPassword.trim().length < 8) {
@@ -991,7 +991,7 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
       let created = 0
       let updated = 0
       const startedAt = Date.now()
-      const mentorRows = importRole === 'lecturer' ? validRows : []
+      const mentorRows = importRole !== 'student' ? validRows : []
       const studentRows = importRole === 'student' ? validRows : []
       const orderedRows = [...mentorRows, ...studentRows]
       const processRow = async (prepared: ImportValidationRow) => {
@@ -1069,7 +1069,7 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
 
   return <section className="max-w-4xl rounded-lg bg-white p-5 shadow-sm">
     <h2 className="font-semibold">Import students or mentors from Excel</h2>
-    <p className="mb-4 text-sm text-gray-500">Upload a spreadsheet, choose the account type, confirm the detected columns, and edit any mapping that is incorrect. Student Nomatrik and mentor Email are required for safe re-imports. KP and phone are optional. Mentor imports use Nama, Jawatan, Gred, UMS PER, and Email.</p>
+    <p className="mb-4 text-sm text-gray-500">Upload a spreadsheet, choose the account type, confirm the detected columns, and edit any mapping that is incorrect. Student Nomatrik and mentor/admin Email are required for safe re-imports. KP and phone are optional. Mentor and admin imports use Nama, Jawatan, Gred, UMS PER, and Email.</p>
     <div className="mb-4 flex gap-2 border-b border-gray-200 pb-3">
       <button type="button" onClick={() => setImportMode('excel')} className={`rounded px-3 py-2 text-sm font-medium ${importMode === 'excel' ? 'bg-ums-blue text-white' : 'bg-gray-100 text-gray-700'}`}>
         Import Excel
@@ -1085,13 +1085,14 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
         <label className="text-xs font-medium text-gray-700">Account type
           <select className="mt-1 w-full rounded border px-3 py-2 text-sm" value={individualRole} onChange={(event) => setIndividualRole(event.target.value as Role)}>
             <option value="lecturer">Mentor / lecturer</option>
+            <option value="admin">Administrator</option>
             <option value="student">Student</option>
           </select>
         </label>
         <label className="text-xs font-medium text-gray-700">Nama *
           <input required className="mt-1 w-full rounded border px-3 py-2 text-sm" value={individualForm.name} onChange={(event) => updateIndividual('name', event.target.value)} />
         </label>
-        {individualRole === 'lecturer' ? (
+        {individualRole !== 'student' ? (
           <>
             <label className="text-xs font-medium text-gray-700">Jawatan *
               <input required className="mt-1 w-full rounded border px-3 py-2 text-sm" value={individualForm.job_title} onChange={(event) => updateIndividual('job_title', event.target.value)} />
@@ -1132,9 +1133,10 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
     {importMode === 'excel' && <input type="file" accept=".xlsx,.xls,.csv" onChange={readFile} className="mb-4 block text-sm" />}
     {importMode === 'excel' && headers.length > 0 && <div className="space-y-3">
       <label className="block text-sm font-medium text-gray-700">Import account type
-        <select className="mt-1 w-full rounded border px-3 py-2" value={importRole} onChange={(event) => setImportRole(event.target.value as 'student' | 'lecturer')}>
+        <select className="mt-1 w-full rounded border px-3 py-2" value={importRole} onChange={(event) => setImportRole(event.target.value as 'student' | 'lecturer' | 'admin')}>
           <option value="student">Students</option>
           <option value="lecturer">Mentors / lecturers</option>
+          <option value="admin">Administrators</option>
         </select>
       </label>
       <div className="rounded border border-gray-200 bg-gray-50 p-3 text-sm">
@@ -1159,9 +1161,9 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
         <p className="mb-2 text-sm font-medium text-gray-700">Column mapping</p>
         <p className="mb-3 text-xs text-gray-500">The suggested mapping is based on the headers in your file. Select a different header whenever a column name is wrong or ambiguous.</p>
         <div className="grid gap-2 sm:grid-cols-2">
-          {(importRole === 'lecturer' ? mentorImportFields : importFields).map((field) => (
+          {(importRole !== 'student' ? mentorImportFields : importFields).map((field) => (
             <label key={field} className="text-sm">
-              <span className="mb-1 block text-xs font-medium text-gray-600">{fieldLabel(field)}{((importRole === 'lecturer' && ['name', 'job_title', 'grade', 'ums_per', 'email'].includes(field)) || field === 'name') && <span className="text-red-600"> *</span>}</span>
+              <span className="mb-1 block text-xs font-medium text-gray-600">{fieldLabel(field)}{((importRole !== 'student' && ['name', 'job_title', 'grade', 'ums_per', 'email'].includes(field)) || field === 'name') && <span className="text-red-600"> *</span>}</span>
               <select className="w-full rounded border px-2 py-1.5" value={mapping[field] ?? ''} onChange={(event) => setMapping((previous) => ({ ...previous, [field]: event.target.value || undefined }))}>
                 <option value="">Do not import</option>
                 {headers.map((header) => <option key={header} value={header}>{header}</option>)}
@@ -1172,9 +1174,9 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
       </div>
       <div className="max-h-96 overflow-auto rounded border border-gray-200">
         <table className="w-full min-w-[620px] text-left text-xs">
-          <thead className="sticky top-0 bg-gray-50 text-gray-500"><tr><th className="p-2">Row</th><th className="p-2">{importRole === 'lecturer' ? 'UMS PER' : 'NoMatrik'}</th><th className="p-2">Nama</th><th className="p-2">{importRole === 'lecturer' ? 'Jawatan' : 'Programme'}</th><th className="p-2">Password</th><th className="p-2">Student warnings</th></tr></thead>
+          <thead className="sticky top-0 bg-gray-50 text-gray-500"><tr><th className="p-2">Row</th><th className="p-2">{importRole !== 'student' ? 'Email' : 'NoMatrik'}</th><th className="p-2">Nama</th><th className="p-2">{importRole !== 'student' ? 'Jawatan' : 'Programme'}</th><th className="p-2">Password</th><th className="p-2">Student warnings</th></tr></thead>
           <tbody className="divide-y">
-            {rows.map((row, index) => <tr key={index}><td className="p-2">{index + 2}</td><td className="p-2">{importRole === 'lecturer' ? (mapping.ums_per ? row[mapping.ums_per] : '—') : (mapping.matric_number ? row[mapping.matric_number] : '—')}</td><td className="p-2">{mapping.name ? row[mapping.name] : '—'}</td><td className="p-2">{importRole === 'lecturer' ? (mapping.job_title ? row[mapping.job_title] : '—') : (mapping.programme ? row[mapping.programme] : '—')}</td><td className="p-2">{passwordMode === 'column' && passwordColumn ? (row[passwordColumn] ? 'Ready' : defaultPassword ? 'Fallback' : 'Missing') : defaultPassword ? 'Manual' : 'Missing'}</td><td className="p-2 text-xs">{missingStudentFields(row).length ? <span className="font-medium text-amber-700">Missing: {missingStudentFields(row).map(fieldLabel).join(', ')}</span> : <span className="text-green-700">Complete</span>}</td></tr>)}
+            {rows.map((row, index) => <tr key={index}><td className="p-2">{index + 2}</td><td className="p-2">{importRole !== 'student' ? (mapping.email ? row[mapping.email] : '—') : (mapping.matric_number ? row[mapping.matric_number] : '—')}</td><td className="p-2">{mapping.name ? row[mapping.name] : '—'}</td><td className="p-2">{importRole !== 'student' ? (mapping.job_title ? row[mapping.job_title] : '—') : (mapping.programme ? row[mapping.programme] : '—')}</td><td className="p-2">{passwordMode === 'column' && passwordColumn ? (row[passwordColumn] ? 'Ready' : defaultPassword ? 'Fallback' : 'Missing') : defaultPassword ? 'Manual' : 'Missing'}</td><td className="p-2 text-xs">{missingStudentFields(row).length ? <span className="font-medium text-amber-700">Missing: {missingStudentFields(row).map(fieldLabel).join(', ')}</span> : <span className="text-green-700">Complete</span>}</td></tr>)}
           </tbody>
         </table>
       </div>
@@ -1232,7 +1234,7 @@ function SpreadsheetImport({ onComplete, onMessage, onError }: { onComplete: () 
           {showFailureDetails && <ImportFailureDetails failures={warningRows} heading="Missing optional data" />}
         </div>
       )}
-      <button disabled={importing || rows.length === 0} onClick={importUsers} className="rounded bg-ums-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{importing ? `Importing ${rows.length} accounts…` : `Validate and import ${rows.length} ${importRole === 'student' ? 'students' : 'mentors'}`}</button>
+      <button disabled={importing || rows.length === 0} onClick={importUsers} className="rounded bg-ums-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{importing ? `Importing ${rows.length} accounts…` : `Validate and import ${rows.length} ${importRole === 'student' ? 'students' : importRole === 'admin' ? 'administrators' : 'mentors'}`}</button>
     </div>}
   </section>
 }

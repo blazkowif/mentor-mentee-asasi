@@ -3,10 +3,10 @@ import { studentAuthEmail } from '@/services/authService'
 export const IMPORT_WORKER_COUNT = 6
 export const IMPORT_MAX_RETRIES = 3
 
-export type ImportRole = 'student' | 'lecturer'
+export type ImportRole = 'student' | 'lecturer' | 'admin'
 export type ImportLookupUser = {
   id: string
-  role: ImportRole | 'admin'
+  role: ImportRole
   name: string
   email: string | null
   matric_number: string | null

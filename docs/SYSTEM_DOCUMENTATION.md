@@ -92,6 +92,8 @@ Administrator capabilities include:
 - deleting individual accounts;
 - deleting all student accounts after an exact confirmation phrase;
 - importing students from `.xlsx`, `.xls`, or CSV files;
+- importing mentor and administrator accounts from the same staff-style
+  spreadsheet fields (Nama, Jawatan, Gred, UMS PER, Email, and password);
 - mapping Malay student-import fields into application fields;
 - choosing the source of imported passwords, with KP selected by the import
   workflow;
