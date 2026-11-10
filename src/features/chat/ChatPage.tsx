@@ -104,6 +104,9 @@ export default function ChatPage() {
           addThread({ key: `personal:${member.id}`, label: member.name, subtitle: member.matric_number ?? 'Group mentee' })
         }
       })
+      studentResults.forEach((student) =>
+        addThread({ key: `personal:${student.id}`, label: student.name, subtitle: student.matric_number ?? 'Student' }),
+      )
       return list
     }
     pinnedContacts.forEach((contact) =>
@@ -148,16 +151,10 @@ export default function ChatPage() {
     if (isLecturer) {
       mentees?.forEach((m) => addThread({ key: `personal:${m.id}`, label: m.name, subtitle: m.matric_number ?? undefined }))
     }
-    if (role === 'student' || isAdmin || isLecturer) {
+    if (isAdmin || isLecturer) {
       studentResults.forEach((student) =>
         addThread({ key: `personal:${student.id}`, label: student.name, subtitle: student.matric_number ?? 'Student' }),
       )
-    }
-    if (role === 'student') {
-      currentGroupMembersQuery.data?.forEach((member) => {
-        if (member.id === user?.id) return
-        addThread({ key: `personal:${member.id}`, label: member.name, subtitle: member.matric_number ?? 'Group mentee' })
-      })
     }
     return list
   }, [chatContacts, currentGroupMembersQuery.data, groups, isAdmin, isLecturer, mentees, mentor, pinnedContacts, role, studentResults, user?.id])
