@@ -4,7 +4,7 @@ import type { Database } from '@/types/database.types'
 type UserRow = Database['public']['Tables']['users']['Row']
 export type ProfilePatch = Partial<Pick<UserRow, 'name' | 'phone' | 'address' | 'motto' | 'profile_image'>>
 export type ChatDirectoryUser = Pick<UserRow, 'id' | 'role' | 'matric_number' | 'name' | 'programme' | 'profile_image'>
-export type PinnedChatContact = ChatDirectoryUser & { contact_type: 'admin' | 'mentor' }
+export type PinnedChatContact = ChatDirectoryUser & { email: string | null; contact_type: 'admin' | 'mentor' }
 const SAFE_USER_FIELDS = 'id, role, matric_number, ic_number, name, gender, religion, race, programme, mentor_id, email, phone, profile_image, address, postcode, city, state, study_status, study_status_smp, lecture_group, residence_college, room_number, bka_status, channel, motto, job_title, grade, ums_per, created_at'
 
 export async function getMentees(lecturerId: string): Promise<UserRow[]> {
@@ -28,6 +28,13 @@ export async function getProfile(userId: string): Promise<UserRow> {
   const { data, error } = await supabase.from('users').select(SAFE_USER_FIELDS).eq('id', userId).single()
   if (error) throw error
   return data
+}
+
+export async function getChatProfile(userId: string): Promise<Pick<UserRow, 'id' | 'role' | 'matric_number' | 'name' | 'programme' | 'email' | 'phone' | 'address' | 'motto' | 'profile_image'>> {
+  const { data, error } = await supabase.rpc('get_chat_profile', { p_user_id: userId })
+  if (error) throw error
+  if (!data?.[0]) throw new Error('This profile is not available.')
+  return data[0]
 }
 
 export async function searchChatUsers(query: string): Promise<ChatDirectoryUser[]> {

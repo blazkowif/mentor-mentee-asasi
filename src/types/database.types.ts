@@ -422,6 +422,7 @@ export interface Database {
           role: UserRole
           matric_number: string | null
           name: string
+          email: string | null
           programme: string | null
           profile_image: string | null
         }>
@@ -462,6 +463,7 @@ export interface Database {
           role: UserRole
           matric_number: string | null
           name: string
+          email: string | null
           programme: string | null
           profile_image: string | null
           contact_type: string
@@ -484,6 +486,21 @@ export interface Database {
       mark_chat_read: {
         Args: { p_contact_id: string }
         Returns: undefined
+      }
+      get_chat_profile: {
+        Args: { p_user_id: string }
+        Returns: Array<{
+          id: string
+          role: UserRole
+          matric_number: string | null
+          name: string
+          programme: string | null
+          email: string | null
+          phone: string | null
+          address: string | null
+          motto: string | null
+          profile_image: string | null
+        }>
       }
       clear_all_chat_history_v2: {
         Args: Record<string, never>

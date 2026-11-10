@@ -32,6 +32,7 @@ export default function ChatPage() {
   const [activeKey, setActiveKey] = useState<string | null>(null)
   const [searchParams] = useSearchParams()
   const [studentSearch, setStudentSearch] = useState('')
+  const [showAllGroupMembers, setShowAllGroupMembers] = useState(false)
   const [pendingMessages, setPendingMessages] = useState<Message[]>([])
   const [sendError, setSendError] = useState<string | null>(null)
   const queryClient = useQueryClient()
@@ -60,7 +61,7 @@ export default function ChatPage() {
   const [profileNoteMessage, setProfileNoteMessage] = useState('')
   const [mentorNote, setMentorNote] = useState('')
   const [mentorNoteMessage, setMentorNoteMessage] = useState('')
-  const profileQuery = useQuery({ queryKey: ['chat-profile', profileUserId ?? ''], queryFn: () => userService.getProfile(profileUserId!), enabled: !!profileUserId })
+  const profileQuery = useQuery({ queryKey: ['chat-profile', profileUserId ?? ''], queryFn: () => userService.getChatProfile(profileUserId!), enabled: !!profileUserId })
   const adminNotesQuery = useQuery({
     queryKey: ['internal-notes', profileUserId ?? ''],
     queryFn: () => mentorNotesService.listInternalNotes(profileUserId!),
@@ -74,8 +75,39 @@ export default function ChatPage() {
 
   const threads: ChatThread[] = useMemo(() => {
     const list: ChatThread[] = []
+    const addThread = (thread: ChatThread) => {
+      if (!list.some((existing) => existing.key === thread.key)) list.push(thread)
+    }
+    if (role === 'student') {
+      const designatedAdmin = pinnedContacts.find(
+        (contact) => contact.contact_type === 'admin' && contact.email?.toLowerCase() === 'stevesalag@ums.edu.my',
+      )
+      const fallbackAdmin = pinnedContacts.find((contact) => contact.contact_type === 'admin')
+      const adminContact = designatedAdmin ?? fallbackAdmin
+      if (adminContact) {
+        addThread({
+          key: `personal:${adminContact.id}`,
+          label: adminContact.name,
+          subtitle: adminContact.email ?? 'Administrator',
+          unreadCount: chatContacts.find((contact) => contact.id === adminContact.id)?.unread_count ?? 0,
+        })
+      }
+      const currentGroup = groups.find((chatGroup) => chatGroup.is_current)
+      if (currentGroup) {
+        addThread({ key: `group:${currentGroup.id}`, label: currentGroup.group_name, subtitle: 'Group mentor' })
+      }
+      if (mentor) {
+        addThread({ key: `personal:${mentor.id}`, label: mentor.name, subtitle: 'Your mentor' })
+      }
+      currentGroupMembersQuery.data?.forEach((member) => {
+        if (member.id !== user?.id) {
+          addThread({ key: `personal:${member.id}`, label: member.name, subtitle: member.matric_number ?? 'Group mentee' })
+        }
+      })
+      return list
+    }
     pinnedContacts.forEach((contact) =>
-      list.push({
+      addThread({
         key: `personal:${contact.id}`,
         label: contact.name,
         subtitle: contact.contact_type === 'mentor' ? 'Your mentor' : 'Administrator',
@@ -83,8 +115,7 @@ export default function ChatPage() {
       }),
     )
     chatContacts.forEach((contact) => {
-      if (list.some((thread) => thread.key === `personal:${contact.id}`)) return
-      list.push({
+      addThread({
         key: `personal:${contact.id}`,
         label: contact.name,
         subtitle: contact.role === 'admin'
@@ -98,34 +129,34 @@ export default function ChatPage() {
     const currentGroups = groups.filter((chatGroup) => chatGroup.is_current)
     const previousGroups = groups.filter((chatGroup) => !chatGroup.is_current)
     currentGroups.forEach((chatGroup) =>
-      list.push({
+      addThread({
         key: `group:${chatGroup.id}`,
         label: chatGroup.group_name,
         subtitle: chatGroup.is_current ? 'Current mentor group' : 'Previous mentor group',
       }),
     )
     if (!isLecturer && mentor && !pinnedContacts.some((contact) => contact.id === mentor.id)) {
-      list.push({ key: `personal:${mentor.id}`, label: mentor.name, subtitle: 'Your mentor' })
+      addThread({ key: `personal:${mentor.id}`, label: mentor.name, subtitle: 'Your mentor' })
     }
     previousGroups.forEach((chatGroup) =>
-      list.push({
+      addThread({
         key: `group:${chatGroup.id}`,
         label: chatGroup.group_name,
         subtitle: 'Previous mentor group',
       }),
     )
     if (isLecturer) {
-      mentees?.forEach((m) => list.push({ key: `personal:${m.id}`, label: m.name, subtitle: m.matric_number ?? undefined }))
+      mentees?.forEach((m) => addThread({ key: `personal:${m.id}`, label: m.name, subtitle: m.matric_number ?? undefined }))
     }
     if (role === 'student' || isAdmin || isLecturer) {
       studentResults.forEach((student) =>
-        list.push({ key: `personal:${student.id}`, label: student.name, subtitle: student.matric_number ?? 'Student' }),
+        addThread({ key: `personal:${student.id}`, label: student.name, subtitle: student.matric_number ?? 'Student' }),
       )
     }
     if (role === 'student') {
       currentGroupMembersQuery.data?.forEach((member) => {
-        if (member.id === user?.id || list.some((thread) => thread.key === `personal:${member.id}`)) return
-        list.push({ key: `personal:${member.id}`, label: member.name, subtitle: member.matric_number ?? 'Group mentee' })
+        if (member.id === user?.id) return
+        addThread({ key: `personal:${member.id}`, label: member.name, subtitle: member.matric_number ?? 'Group mentee' })
       })
     }
     return list
@@ -152,6 +183,10 @@ export default function ChatPage() {
     effectiveActiveKey?.startsWith('personal:') ? effectiveActiveKey.split(':')[1] : undefined
 
   const activeGroupId = effectiveActiveKey?.startsWith('group:') ? effectiveActiveKey.slice(6) : undefined
+  useEffect(() => {
+    setShowAllGroupMembers(false)
+  }, [activeGroupId])
+
   const groupMembersQuery = useQuery({
     queryKey: ['chat', 'group-members', activeGroupId ?? ''],
     queryFn: () => chatService.listGroupMembers(activeGroupId!),
@@ -320,9 +355,20 @@ export default function ChatPage() {
             </div>
             {activeGroupId && (
               <div className="border-b border-[#3a405c] bg-[#20243a] px-5 py-3">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#aeb6d2]">Group members</p>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[#aeb6d2]">Group members</p>
+                  {(groupMembersQuery.data?.length ?? 0) > 5 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllGroupMembers((visible) => !visible)}
+                      className="text-xs font-medium text-[#c5cbff] hover:underline"
+                    >
+                      {showAllGroupMembers ? 'Show less' : `View all (${groupMembersQuery.data?.length ?? 0})`}
+                    </button>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-2">
-                  {groupMembersQuery.data?.map((member) => (
+                  {(showAllGroupMembers ? groupMembersQuery.data : groupMembersQuery.data?.slice(0, 5))?.map((member) => (
                     <button key={member.id} type="button" onClick={() => selectThread(`personal:${member.id}`)} className="rounded-full bg-[#303650] px-3 py-1 text-xs text-white hover:bg-[#46507a]">
                       {member.name}
                     </button>
